@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频压缩功能测试</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body class="bg-slate-900 text-white min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+        <h1 class="text-3xl font-bold text-center mb-8 text-sky-400">视频压缩功能测试</h1>
+
+        <div class="bg-slate-800 rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-sky-300">浏览器支持检测</h2>
+            <div id="support-info" class="space-y-2"></div>
+        </div>
+
+        <div class="bg-slate-800 rounded-lg p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4 text-sky-300">选择测试视频</h2>
+            <input type="file" id="videoInput" accept="video/*"
+                class="block w-full text-sm text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-sky-600 file:text-white hover:file:bg-sky-700">
+        </div>
+
+        <div id="fileInfo" class="bg-slate-800 rounded-lg p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-sky-300">文件信息</h2>
+            <div id="originalInfo" class="space-y-2"></div>
+        </div>
+
+        <div id="compressionControls" class="bg-slate-800 rounded-lg p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-sky-300">压缩设置</h2>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-sm font-medium mb-2">最大宽度</label>
+                    <select id="maxWidth" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2">
+                        <option value="640">640px</option>
+                        <option value="854">854px</option>
+                        <option value="1280" selected>1280px</option>
+                        <option value="1920">1920px</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-2">最大高度</label>
+                    <select id="maxHeight" class="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2">
+                        <option value="360">360px</option>
+                        <option value="480">480px</option>
+                        <option value="720" selected>720px</option>
+                        <option value="1080">1080px</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mb-4">
+                <label class="block text-sm font-medium mb-2">质量: <span id="qualityValue">60%</span></label>
+                <input type="range" id="quality" min="0.1" max="1" step="0.1" value="0.6"
+                    class="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer">
+            </div>
+            <button id="compressBtn"
+                class="w-full bg-sky-600 hover:bg-sky-500 text-white font-medium py-3 px-4 rounded-lg transition duration-200">
+                开始压缩测试
+            </button>
+        </div>
+
+        <div id="progressSection" class="bg-slate-800 rounded-lg p-6 mb-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-sky-300">压缩进度</h2>
+            <div class="mb-2">
+                <div class="flex justify-between text-sm">
+                    <span id="progressStage">准备中...</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+                <div class="w-full bg-slate-700 rounded-full h-3">
+                    <div id="progressBar" class="bg-sky-500 h-3 rounded-full transition-all duration-300"
+                        style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="resultSection" class="bg-slate-800 rounded-lg p-6 hidden">
+            <h2 class="text-xl font-semibold mb-4 text-sky-300">压缩结果</h2>
+            <div id="resultInfo" class="space-y-2 mb-4"></div>
+            <button id="downloadBtn"
+                class="bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded transition duration-200">
+                下载压缩文件
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        // 简化的压缩工具类
+        class SimpleVideoCompressor {
+            static formatFileSize(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+
+            static getSupportedFormats() {
+                const formats = [
+                    'video/webm;codecs=vp9',
+                    'video/webm;codecs=vp8',
+                    'video/webm',
+                    'video/mp4;codecs=h264',
+                    'video/mp4'
+                ];
+                return formats.filter(format => MediaRecorder.isTypeSupported(format));
+            }
+
+            static isCompressionSupported() {
+                return typeof MediaRecorder !== 'undefined' && this.getSupportedFormats().length > 0;
+            }
+
+            static async compressVideo(file, options, onProgress) {
+                return new Promise((resolve, reject) => {
+                    const video = document.createElement('video');
+                    video.muted = true;
+                    video.playsInline = true;
+
+                    video.onloadedmetadata = () => {
+                        try {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+
+                            if (!ctx) {
+                                reject(new Error('无法创建Canvas上下文'));
+                                return;
+                            }
+
+                            // 计算新尺寸
+                            let { width, height } = { width: video.videoWidth, height: video.videoHeight };
+                            if (width > options.maxWidth || height > options.maxHeight) {
+                                const widthRatio = options.maxWidth / width;
+                                const heightRatio = options.maxHeight / height;
+                                const ratio = Math.min(widthRatio, heightRatio);
+                                width = Math.round(width * ratio);
+                                height = Math.round(height * ratio);
+                            }
+
+                            canvas.width = width;
+                            canvas.height = height;
+
+                            onProgress?.({ progress: 20, stage: '正在设置压缩参数...' });
+
+                            const mimeType = this.getSupportedFormats()[0] || 'video/webm';
+                            const stream = canvas.captureStream(24);
+
+                            const mediaRecorder = new MediaRecorder(stream, {
+                                mimeType,
+                                videoBitsPerSecond: options.videoBitrate || 800000
+                            });
+
+                            const chunks = [];
+
+                            mediaRecorder.ondataavailable = (event) => {
+                                if (event.data.size > 0) {
+                                    chunks.push(event.data);
+                                }
+                            };
+
+                            mediaRecorder.onstop = () => {
+                                onProgress?.({ progress: 95, stage: '正在生成压缩文件...' });
+
+                                const extension = mimeType.includes('webm') ? 'webm' : 'mp4';
+                                const compressedBlob = new Blob(chunks, { type: mimeType });
+                                const compressedFile = new File(
+                                    [compressedBlob],
+                                    `compressed_${file.name.replace(/\.[^/.]+$/, `.${extension}`)}`,
+                                    { type: mimeType }
+                                );
+
+                                onProgress?.({ progress: 100, stage: '压缩完成！' });
+                                resolve(compressedFile);
+                            };
+
+                            mediaRecorder.onerror = (event) => {
+                                reject(new Error(`压缩过程中发生错误: ${event}`));
+                            };
+
+                            onProgress?.({ progress: 30, stage: '开始压缩视频...' });
+                            mediaRecorder.start();
+
+                            let startTime = Date.now();
+                            const duration = video.duration * 1000;
+
+                            const captureFrame = () => {
+                                if (video.ended || video.paused) {
+                                    mediaRecorder.stop();
+                                    return;
+                                }
+
+                                ctx.drawImage(video, 0, 0, width, height);
+
+                                const elapsed = Date.now() - startTime;
+                                const progress = Math.min(30 + (elapsed / duration) * 60, 90);
+                                onProgress?.({
+                                    progress: Math.round(progress),
+                                    stage: `正在压缩视频... ${Math.round((elapsed / duration) * 100)}%`
+                                });
+
+                                requestAnimationFrame(captureFrame);
+                            };
+
+                            video.onplay = () => {
+                                startTime = Date.now();
+                                captureFrame();
+                            };
+
+                            video.onended = () => {
+                                mediaRecorder.stop();
+                            };
+
+                            video.currentTime = 0;
+                            video.play().catch(reject);
+
+                        } catch (error) {
+                            reject(error);
+                        }
+                    };
+
+                    video.onerror = () => {
+                        reject(new Error('视频加载失败'));
+                    };
+
+                    onProgress?.({ progress: 10, stage: '正在加载视频...' });
+                    video.src = URL.createObjectURL(file);
+                    video.load();
+                });
+            }
+        }
+
+        // 页面逻辑
+        let selectedFile = null;
+        let compressedFile = null;
+
+        // 检测浏览器支持
+        function checkSupport() {
+            const supportInfo = document.getElementById('support-info');
+            const isSupported = SimpleVideoCompressor.isCompressionSupported();
+            const supportedFormats = SimpleVideoCompressor.getSupportedFormats();
+
+            supportInfo.innerHTML = `
+                <div class="flex items-center space-x-2">
+                    <span class="${isSupported ? 'text-green-400' : 'text-red-400'}">
+                        ${isSupported ? '✅' : '❌'} 压缩支持: ${isSupported ? '支持' : '不支持'}
+                    </span>
+                </div>
+                <div class="text-sm text-slate-400">
+                    支持的格式: ${supportedFormats.length > 0 ? supportedFormats.join(', ') : '无'}
+                </div>
+            `;
+        }
+
+        // 文件选择处理
+        document.getElementById('videoInput').addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                selectedFile = file;
+                showFileInfo(file);
+                document.getElementById('compressionControls').classList.remove('hidden');
+            }
+        });
+
+        // 显示文件信息
+        function showFileInfo(file) {
+            const fileInfo = document.getElementById('fileInfo');
+            const originalInfo = document.getElementById('originalInfo');
+
+            originalInfo.innerHTML = `
+                <div>文件名: ${file.name}</div>
+                <div>大小: ${SimpleVideoCompressor.formatFileSize(file.size)}</div>
+                <div>类型: ${file.type}</div>
+            `;
+
+            fileInfo.classList.remove('hidden');
+        }
+
+        // 质量滑块
+        document.getElementById('quality').addEventListener('input', (event) => {
+            const value = Math.round(event.target.value * 100);
+            document.getElementById('qualityValue').textContent = `${value}%`;
+        });
+
+        // 压缩按钮
+        document.getElementById('compressBtn').addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            const options = {
+                maxWidth: parseInt(document.getElementById('maxWidth').value),
+                maxHeight: parseInt(document.getElementById('maxHeight').value),
+                quality: parseFloat(document.getElementById('quality').value),
+                videoBitrate: 800000
+            };
+
+            const progressSection = document.getElementById('progressSection');
+            const resultSection = document.getElementById('resultSection');
+
+            progressSection.classList.remove('hidden');
+            resultSection.classList.add('hidden');
+
+            try {
+                compressedFile = await SimpleVideoCompressor.compressVideo(
+                    selectedFile,
+                    options,
+                    (progress) => {
+                        document.getElementById('progressStage').textContent = progress.stage;
+                        document.getElementById('progressPercent').textContent = `${progress.progress}%`;
+                        document.getElementById('progressBar').style.width = `${progress.progress}%`;
+                    }
+                );
+
+                showResult();
+            } catch (error) {
+                alert(`压缩失败: ${error.message}`);
+            } finally {
+                progressSection.classList.add('hidden');
+            }
+        });
+
+        // 显示结果
+        function showResult() {
+            const resultInfo = document.getElementById('resultInfo');
+            const reduction = ((selectedFile.size - compressedFile.size) / selectedFile.size * 100).toFixed(1);
+
+            resultInfo.innerHTML = `
+                <div>压缩后文件名: ${compressedFile.name}</div>
+                <div>压缩后大小: ${SimpleVideoCompressor.formatFileSize(compressedFile.size)}</div>
+                <div>压缩后类型: ${compressedFile.type}</div>
+                <div class="text-green-400">大小减少: ${reduction}%</div>
+            `;
+
+            document.getElementById('resultSection').classList.remove('hidden');
+        }
+
+        // 下载按钮
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            if (compressedFile) {
+                const url = URL.createObjectURL(compressedFile);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = compressedFile.name;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        });
+
+        // 初始化
+        checkSupport();
+    </script>
+</body>
+
+</html>
