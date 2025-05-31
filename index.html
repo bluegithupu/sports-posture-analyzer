@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>运动姿态分析大师</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react": "https://esm.sh/react@^19.1.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.0.1"
+  }
+}
+</script>
+</head>
+<body class="bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100">
+  <div id="root"></div>
+  <script>
+    // process.env.API_KEY is expected to be set in the deployment environment.
+    // For local development, you might need to set this manually in your dev server or a .env file if your setup supports it.
+    // Example: var process = { env: { API_KEY: "YOUR_API_KEY_HERE" } };
+    // However, DO NOT commit actual API keys to version control.
+    if (!process) {
+      var process = { env: {} };
+    }
+    // If process.env.API_KEY is not defined, the application will show an error when trying to make an API call.
+  </script>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html><link rel="stylesheet" href="index.css">
+<script src="index.tsx" type="module"></script>
