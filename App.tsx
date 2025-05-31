@@ -32,10 +32,10 @@ async function waitForFileActive(ai: GoogleGenAI, fileName: string): Promise<Gem
       // If ai.files.get fails, retry a few times before failing.
       // This can happen due to transient network issues.
       console.warn(`Polling file state failed for ${fileName}, attempt ${i + 1}:`, err);
-      if (i < MAX_POLLING_ATTEMPTS -1) {
+      if (i < MAX_POLLING_ATTEMPTS - 1) {
         await new Promise(resolve => setTimeout(resolve, POLLING_INTERVAL_MS * (i + 1))); // Exponential backoff could be better
       } else {
-         throw new Error(`获取文件状态时出错: ${fileName}。错误: ${(err as Error).message || String(err)} (Error fetching file status for ${fileName}. Error: ${(err as Error).message || String(err)})`);
+        throw new Error(`获取文件状态时出错: ${fileName}。错误: ${(err as Error).message || String(err)} (Error fetching file status for ${fileName}. Error: ${(err as Error).message || String(err)})`);
       }
     }
   }
@@ -50,7 +50,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  
+
   const apiKey = process.env.API_KEY;
 
   useEffect(() => {
@@ -79,7 +79,7 @@ const App: React.FC = () => {
       return;
     }
 
-    const MAX_VIDEO_SIZE_MB = 5000; 
+    const MAX_VIDEO_SIZE_MB = 5000;
     const MAX_VIDEO_SIZE_BYTES = MAX_VIDEO_SIZE_MB * 1024 * 1024;
 
     if (videoFile.size > MAX_VIDEO_SIZE_BYTES) {
@@ -95,16 +95,16 @@ const App: React.FC = () => {
 
     try {
       const ai = new GoogleGenAI({ apiKey });
-      
+
       setLoadingMessage('正在上传视频文件...');
       // FIX: Removed `displayName` property as it's not a valid key for `UploadFileParameters`.
       // The API likely uses the File object's name property by default or it's not settable here.
       const uploadResult = await ai.files.upload({
         file: videoFile,
       });
-      
+
       if (!uploadResult || !uploadResult.name) {
-         throw new Error('视频文件上传后未返回有效的文件名。(Video file upload did not return a valid file name.)');
+        throw new Error('视频文件上传后未返回有效的文件名。(Video file upload did not return a valid file name.)');
       }
       uploadedFileName = uploadResult.name; // Store the file name (resource name like 'files/your-file-id')
 
@@ -114,11 +114,11 @@ const App: React.FC = () => {
       if (!activeFile.uri || !activeFile.mimeType) {
         throw new Error('激活的文件信息不完整，缺少URI或MIME类型。(Active file information is incomplete, missing URI or MIME type.)');
       }
-      
+
       setLoadingMessage('文件处理完成，正在进行姿态分析...');
       const model = 'gemini-2.5-flash-preview-04-17';
       const systemInstructionText = "你是一位顶级的运动医学专家和体态教练。";
-      
+
       const userPromptText = `
 附件是一个用户的运动视频。请仔细分析视频中用户的运动姿态和动作模式。
 请在报告中包含以下内容：
@@ -150,16 +150,16 @@ const App: React.FC = () => {
           systemInstruction: systemInstructionText,
         }
       });
-      
-      setAnalysisReport(response.text);
+
+      setAnalysisReport(response.text || '');
 
     } catch (err) {
       console.error('Analysis Error:', err);
       let errorMessage = '分析视频时发生错误。(An error occurred while analyzing the video.)';
       if (err instanceof Error) {
-        errorMessage = err.message; 
+        errorMessage = err.message;
       }
-      
+
       if (typeof err === 'string' && err.includes("API key not valid")) {
         errorMessage = "API密钥无效或已过期。请检查您的API密钥配置。(Invalid or expired API key. Please check your API key configuration.)";
       } else if (err instanceof Error) {
@@ -170,9 +170,9 @@ const App: React.FC = () => {
         } else if (err.message.includes("file processing error") || err.message.includes("failed to process file") || err.message.includes("文件处理失败") || err.message.includes("等待文件激活超时")) {
           errorMessage = `视频文件处理或等待激活时出错: ${err.message}`;
         } else if (err.message.includes("500") || err.message.includes("Internal error") || (err as any)?.error?.status === "INTERNAL" || (err as any)?.error?.code === 500) {
-           errorMessage = `分析服务遇到内部错误。请稍后再试。如果问题持续，请尝试使用不同的、较短的或更清晰的视频文件，或联系支持。(Analysis service encountered an internal error. Please try again later. If the problem persists, try a different, shorter, or clearer video file, or contact support.) Original error: ${err.message}`;
+          errorMessage = `分析服务遇到内部错误。请稍后再试。如果问题持续，请尝试使用不同的、较短的或更清晰的视频文件，或联系支持。(Analysis service encountered an internal error. Please try again later. If the problem persists, try a different, shorter, or clearer video file, or contact support.) Original error: ${err.message}`;
         } else if (err.message.includes("412") && err.message.includes("FAILED_PRECONDITION")) {
-            errorMessage = `文件预处理失败或未准备好: ${err.message}。请稍后再试或尝试其他文件。(File precondition failed or not ready: ${err.message}. Please try again later or try a different file.)`;
+          errorMessage = `文件预处理失败或未准备好: ${err.message}。请稍后再试或尝试其他文件。(File precondition failed or not ready: ${err.message}. Please try again later or try a different file.)`;
         }
       }
       setError(errorMessage);
@@ -205,7 +205,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100 font-sans">
       <Header />
-      
+
       <main className="flex-grow container mx-auto px-4 py-8">
         <div className="bg-slate-800 shadow-2xl rounded-lg p-6 md:p-10">
           <h2 className="text-3xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-cyan-300">
@@ -218,9 +218,9 @@ const App: React.FC = () => {
                 <h3 className="text-xl font-semibold mb-4 text-sky-300">1. 上传视频</h3>
                 <FileUpload onFileSelect={handleFileSelect} />
                 {videoFile && (
-                   <p className="text-xs text-slate-400 mt-2">
-                     已选择文件: {videoFile.name} ({(videoFile.size / 1024 / 1024).toFixed(2)} MB)
-                   </p>
+                  <p className="text-xs text-slate-400 mt-2">
+                    已选择文件: {videoFile.name} ({(videoFile.size / 1024 / 1024).toFixed(2)} MB)
+                  </p>
                 )}
                 {videoSrc && (
                   <div className="mt-4">
@@ -228,7 +228,7 @@ const App: React.FC = () => {
                   </div>
                 )}
               </div>
-              
+
               {videoFile && (
                 <div className="p-6 bg-slate-700/50 rounded-lg shadow-lg">
                   <h3 className="text-xl font-semibold mb-4 text-sky-300">2. 开始分析</h3>
@@ -251,7 +251,7 @@ const App: React.FC = () => {
                       </>
                     )}
                   </button>
-                   {!apiKey && !isLoading && <p className="text-red-400 text-sm mt-2">API密钥未配置，无法开始分析。</p>}
+                  {!apiKey && !isLoading && <p className="text-red-400 text-sm mt-2">API密钥未配置，无法开始分析。</p>}
                 </div>
               )}
             </div>
@@ -265,18 +265,18 @@ const App: React.FC = () => {
                   {analysisReport && !isLoading && <AnalysisReport report={analysisReport} />}
                 </div>
               )}
-               { !isLoading && !analysisReport && !error && !videoFile &&
+              {!isLoading && !analysisReport && !error && !videoFile &&
                 <div className="p-6 bg-slate-700/50 rounded-lg shadow-lg min-h-[200px] flex flex-col justify-center items-center text-slate-400">
-                    <i className="fas fa-film text-4xl mb-4"></i>
-                    <p>请先上传一个视频并开始分析。</p>
-                    <p className="text-sm mt-1">分析结果将显示在此处。</p>
+                  <i className="fas fa-film text-4xl mb-4"></i>
+                  <p>请先上传一个视频并开始分析。</p>
+                  <p className="text-sm mt-1">分析结果将显示在此处。</p>
                 </div>
               }
             </div>
           </div>
         </div>
       </main>
-      
+
       <Footer />
     </div>
   );
