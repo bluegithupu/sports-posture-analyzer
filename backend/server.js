@@ -14,6 +14,7 @@ const app = express();
 const allowedOrigins = [
     'http://localhost:5173', // 前端开发环境
     'http://localhost:5002', // 后端自己
+    'https://sports-posture-analyzer-kooj.vercel.app', // Vercel 前端
     // 如果有其他允许的域名，在这里添加
 ];
 
@@ -35,7 +36,7 @@ const port = process.env.PORT || 5002; // Vercel sets PORT env variable
 
 // Configuration for Multer (file uploads)
 const UPLOAD_DIR = '/tmp/uploads_nodejs'; // Vercel allows writing to /tmp
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500 MB
+const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4 MB, Vercel Hobby limit is 4.5MB
 
 // Ensure upload directory exists
 if (!fs.existsSync(UPLOAD_DIR)) {
