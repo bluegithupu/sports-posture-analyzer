@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 interface AnalysisReportProps {
   report: string;
@@ -6,10 +7,6 @@ interface AnalysisReportProps {
 
 export const AnalysisReport: React.FC<AnalysisReportProps> = ({ report }) => {
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
-
-  // Split the report into paragraphs for better readability if there are double newlines
-  // Or just display as pre-formatted text
-  const paragraphs = report.split(/\n\s*\n/); // Splits by one or more empty lines
 
   const handleCopyToClipboard = async () => {
     // Format the report as markdown
@@ -79,13 +76,27 @@ ${report}
         </button>
       </div>
 
-      {/* Report content */}
+      {/* Report content with Markdown rendering */}
       <div className="prose prose-invert prose-sm sm:prose-base max-w-none p-4">
-        {paragraphs.map((paragraph, index) => (
-          <p key={index} className="whitespace-pre-wrap mb-3 last:mb-0 text-slate-300">
-            {paragraph}
-          </p>
-        ))}
+        <ReactMarkdown
+          components={{
+            // 自定义组件样式以匹配深色主题
+            h1: ({ ...props }) => <h1 className="text-slate-100 text-xl font-bold mb-4" {...props} />,
+            h2: ({ ...props }) => <h2 className="text-slate-200 text-lg font-semibold mb-3" {...props} />,
+            h3: ({ ...props }) => <h3 className="text-slate-200 text-base font-medium mb-2" {...props} />,
+            p: ({ ...props }) => <p className="text-slate-300 mb-3 leading-relaxed" {...props} />,
+            strong: ({ ...props }) => <strong className="text-slate-100 font-semibold" {...props} />,
+            em: ({ ...props }) => <em className="text-slate-200 italic" {...props} />,
+            ul: ({ ...props }) => <ul className="text-slate-300 mb-3 pl-6 list-disc" {...props} />,
+            ol: ({ ...props }) => <ol className="text-slate-300 mb-3 pl-6 list-decimal" {...props} />,
+            li: ({ ...props }) => <li className="mb-1" {...props} />,
+            blockquote: ({ ...props }) => <blockquote className="border-l-4 border-blue-400 pl-4 text-slate-300 italic" {...props} />,
+            code: ({ ...props }) => <code className="bg-slate-700 text-blue-300 px-1 py-0.5 rounded text-sm" {...props} />,
+            hr: ({ ...props }) => <hr className="border-slate-600 my-4" {...props} />
+          }}
+        >
+          {report}
+        </ReactMarkdown>
       </div>
 
       {/* Copy success notification */}
