@@ -64,7 +64,11 @@ async function updateAnalysisEventStatus(eventId, status, errorMessage = null) {
 
     try {
         const updateData = { status };
-        if (errorMessage) {
+
+        // 如果传入 null，明确清除错误消息
+        if (errorMessage === null) {
+            updateData.error_message = null;
+        } else if (errorMessage) {
             updateData.error_message = errorMessage;
         }
 
@@ -78,7 +82,7 @@ async function updateAnalysisEventStatus(eventId, status, errorMessage = null) {
             return { success: false, error: error.message };
         }
 
-        console.log(`Analysis event ${eventId} status updated to: ${status}`);
+        console.log(`Analysis event ${eventId} status updated to: ${status}${errorMessage === null ? ' (error message cleared)' : ''}`);
         return { success: true };
     } catch (err) {
         console.error("Exception updating analysis event status:", err);
@@ -197,11 +201,45 @@ async function getAnalysisHistory(limit = 10) {
     }
 }
 
+/**
+ * 根据ID获取单个分析事件
+ * @param {string} eventId - 事件ID
+ * @returns {Promise<{data: object|null, error?: string}>}
+ */
+async function getAnalysisEventById(eventId) {
+    if (!supabase) {
+        return { data: null, error: "Database not configured" };
+    }
+
+    try {
+        const { data, error } = await supabase
+            .from('analysis_events')
+            .select('*')
+            .eq('id', eventId)
+            .single();
+
+        if (error) {
+            if (error.code === 'PGRST116') {
+                // No rows returned
+                return { data: null, error: "Event not found" };
+            }
+            console.error("Error fetching analysis event:", error);
+            return { data: null, error: error.message };
+        }
+
+        return { data };
+    } catch (err) {
+        console.error("Exception fetching analysis event:", err);
+        return { data: null, error: err.message };
+    }
+}
+
 module.exports = {
     supabase,
     createAnalysisEvent,
     updateAnalysisEventStatus,
     updateAnalysisEventGeminiLink,
     completeAnalysisEvent,
-    getAnalysisHistory
+    getAnalysisHistory,
+    getAnalysisEventById
 }; 

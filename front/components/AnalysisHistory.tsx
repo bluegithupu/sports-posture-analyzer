@@ -24,6 +24,7 @@ export const AnalysisHistory: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [selectedReport, setSelectedReport] = useState<string | null>(null);
     const [showReportModal, setShowReportModal] = useState(false);
+    const [retryingJobs, setRetryingJobs] = useState<Set<string>>(new Set());
 
     // 获取历史记录
     const fetchHistory = async () => {
@@ -99,6 +100,50 @@ export const AnalysisHistory: React.FC = () => {
             return fileName || '未知文件';
         } catch {
             return '未知文件';
+        }
+    };
+
+    // 重试失败的任务
+    const retryJob = async (jobId: string) => {
+        try {
+            setRetryingJobs(prev => new Set(prev).add(jobId));
+
+            const response = await fetch(`${API_BASE_URL}/jobs/${jobId}/retry`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `重试失败: ${response.status}`);
+            }
+
+            const result = await response.json();
+            console.log('重试成功启动:', result);
+
+            // 更新历史记录中的状态
+            setHistory(prevHistory =>
+                prevHistory.map(event =>
+                    event.id === jobId
+                        ? { ...event, status: 'pending' as const, error_message: undefined }
+                        : event
+                )
+            );
+
+            // 显示成功消息
+            alert('重试已启动，请稍后刷新页面查看状态。');
+
+        } catch (err) {
+            console.error('重试错误:', err);
+            alert(`重试失败: ${(err as Error).message}`);
+        } finally {
+            setRetryingJobs(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(jobId);
+                return newSet;
+            });
         }
     };
 
@@ -252,6 +297,28 @@ export const AnalysisHistory: React.FC = () => {
                                                             >
                                                                 <i className="fas fa-file-alt mr-1"></i>
                                                                 查看报告
+                                                            </button>
+                                                        )}
+                                                        {event.status === 'failed' && (
+                                                            <button
+                                                                onClick={() => retryJob(event.id)}
+                                                                disabled={retryingJobs.has(event.id)}
+                                                                className={`text-white px-3 py-1 rounded text-xs transition duration-200 flex items-center ${retryingJobs.has(event.id)
+                                                                        ? 'bg-gray-500 cursor-not-allowed'
+                                                                        : 'bg-orange-600 hover:bg-orange-700'
+                                                                    }`}
+                                                            >
+                                                                {retryingJobs.has(event.id) ? (
+                                                                    <>
+                                                                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-1"></div>
+                                                                        重试中
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <i className="fas fa-redo mr-1"></i>
+                                                                        重试
+                                                                    </>
+                                                                )}
                                                             </button>
                                                         )}
                                                     </div>

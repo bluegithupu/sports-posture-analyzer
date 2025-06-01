@@ -15,7 +15,8 @@ const {
     updateAnalysisEventStatus,
     updateAnalysisEventGeminiLink,
     completeAnalysisEvent,
-    getAnalysisHistory
+    getAnalysisHistory,
+    getAnalysisEventById
 } = require('./supabase');
 
 const app = express();
@@ -110,6 +111,17 @@ if (R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET_NAME && R2_ACCOUNT_ID)
 }
 
 const analysisJobs = {};
+
+// 辅助函数：从URL中提取文件名
+function getVideoFileName(url) {
+    try {
+        const urlParts = url.split('/');
+        const fileName = urlParts[urlParts.length - 1];
+        return fileName || 'unknown_file.mp4';
+    } catch {
+        return 'unknown_file.mp4';
+    }
+}
 
 async function performAnalysisFromUrl(jobId, videoUrl, originalFilename, mimeType, dbEventId = null) {
     if (!ai) {
@@ -519,6 +531,88 @@ app.get('/api/analysis-history', async (req, res) => {
         data: data,
         count: data.length
     });
+});
+
+// 重试失败的分析任务
+app.post('/api/jobs/:jobId/retry', async (req, res) => {
+    const { jobId } = req.params;
+
+    if (!jobId) {
+        return res.status(400).json({ error: 'Missing job ID.' });
+    }
+
+    try {
+        // 从数据库获取作业详情
+        const { data: jobData, error: fetchError } = await getAnalysisEventById(jobId);
+
+        if (fetchError) {
+            return res.status(500).json({ error: `Failed to fetch job details: ${fetchError}` });
+        }
+
+        if (!jobData) {
+            return res.status(404).json({ error: 'Job not found.' });
+        }
+
+        // 检查作业状态是否为失败
+        if (jobData.status !== 'failed') {
+            return res.status(400).json({
+                error: `Job is not in failed state. Current status: ${jobData.status}`
+            });
+        }
+
+        // 重置作业状态为 pending
+        const { success: updateSuccess, error: updateError } = await updateAnalysisEventStatus(
+            jobId,
+            'pending',
+            null // 清除错误消息
+        );
+
+        if (!updateSuccess) {
+            return res.status(500).json({ error: `Failed to update job status: ${updateError}` });
+        }
+
+        // 生成新的处理 job ID
+        const processingJobId = uuidv4();
+
+        // 从失败的阶段继续处理
+        const videoUrl = jobData.r2_video_link;
+        const originalFilename = getVideoFileName(videoUrl);
+        const contentType = 'video/mp4'; // 默认类型，可以根据需要改进
+
+        // 初始化处理任务状态
+        analysisJobs[processingJobId] = {
+            status: 'pending',
+            message: 'Retry request received, restarting analysis...',
+            videoUrl,
+            originalFilename,
+            contentType,
+            dbEventId: jobId // 使用原始的数据库事件ID
+        };
+
+        // 根据失败阶段决定从哪里重新开始
+        if (jobData.gemini_file_link) {
+            // 如果已经有 Gemini 文件链接，从分析阶段重新开始
+            console.log(`[Retry ${jobId}] Gemini file already exists, restarting from analysis phase`);
+            // 这里需要实现从 Gemini 文件开始分析的逻辑
+            // 暂时先重新完整执行
+            performAnalysisFromUrl(processingJobId, videoUrl, originalFilename, contentType, jobId);
+        } else {
+            // 从头开始重新执行整个流程
+            console.log(`[Retry ${jobId}] Starting complete retry from beginning`);
+            performAnalysisFromUrl(processingJobId, videoUrl, originalFilename, contentType, jobId);
+        }
+
+        res.status(202).json({
+            message: "Job retry started successfully.",
+            original_job_id: jobId,
+            processing_job_id: processingJobId,
+            status: 'pending'
+        });
+
+    } catch (error) {
+        console.error(`Error retrying job ${jobId}:`, error);
+        res.status(500).json({ error: 'Internal server error during retry.' });
+    }
 });
 
 app.listen(port, () => {
