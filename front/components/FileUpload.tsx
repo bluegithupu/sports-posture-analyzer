@@ -132,6 +132,17 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
         </label>
       </div>
 
+      {/* R2 上传提示 */}
+      <div className="p-3 bg-green-900/20 rounded-lg border border-green-600/30">
+        <div className="flex items-center space-x-2 text-green-400">
+          <i className="fas fa-cloud-upload-alt"></i>
+          <span className="text-sm font-medium">云存储上传已启用</span>
+        </div>
+        <p className="text-xs text-green-300 mt-1">
+          文件将直接上传到 Cloudflare R2 云存储，支持更大的文件和更快的上传速度。
+        </p>
+      </div>
+
       {/* 压缩设置 */}
       {enableCompression && (
         <CompressionSettings

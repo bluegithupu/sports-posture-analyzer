@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>R2 上传测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #1e293b;
+            color: #e2e8f0;
+        }
+
+        .container {
+            background-color: #334155;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        input[type="file"] {
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #475569;
+            border: 1px solid #64748b;
+            border-radius: 4px;
+            color: #e2e8f0;
+        }
+
+        button {
+            background-color: #0ea5e9;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        button:hover {
+            background-color: #0284c7;
+        }
+
+        button:disabled {
+            background-color: #64748b;
+            cursor: not-allowed;
+        }
+
+        .progress {
+            background-color: #475569;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-bar {
+            background-color: #10b981;
+            height: 20px;
+            transition: width 0.3s ease;
+        }
+
+        .log {
+            background-color: #1e293b;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Cloudflare R2 上传测试</h1>
+
+    <div class="container">
+        <h2>1. 选择文件</h2>
+        <input type="file" id="fileInput" accept="video/*">
+        <div id="fileInfo"></div>
+    </div>
+
+    <div class="container">
+        <h2>2. 上传控制</h2>
+        <button id="uploadBtn" disabled>开始上传</button>
+        <button id="clearBtn">清除日志</button>
+
+        <div class="progress" style="display: none;" id="progressContainer">
+            <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+        </div>
+        <div id="progressText"></div>
+    </div>
+
+    <div class="container">
+        <h2>3. 日志</h2>
+        <div class="log" id="logContainer"></div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:5002/api';
+
+        const fileInput = document.getElementById('fileInput');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const fileInfo = document.getElementById('fileInfo');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const logContainer = document.getElementById('logContainer');
+
+        let selectedFile = null;
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logContainer.textContent += `[${timestamp}] ${message}\n`;
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function updateProgress(percentage, text) {
+            progressBar.style.width = percentage + '%';
+            progressText.textContent = text || `上传进度: ${percentage}%`;
+        }
+
+        fileInput.addEventListener('change', (e) => {
+            selectedFile = e.target.files[0];
+            if (selectedFile) {
+                fileInfo.innerHTML = `
+                    <p>文件名: ${selectedFile.name}</p>
+                    <p>文件大小: ${(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p>文件类型: ${selectedFile.type}</p>
+                `;
+                uploadBtn.disabled = false;
+                log(`文件已选择: ${selectedFile.name} (${(selectedFile.size / 1024 / 1024).toFixed(2)} MB)`);
+            } else {
+                fileInfo.innerHTML = '';
+                uploadBtn.disabled = true;
+            }
+        });
+
+        clearBtn.addEventListener('click', () => {
+            logContainer.textContent = '';
+        });
+
+        uploadBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+
+            uploadBtn.disabled = true;
+            progressContainer.style.display = 'block';
+            updateProgress(0, '准备上传...');
+
+            try {
+                // 第一步：获取预签名 URL
+                log('正在获取预签名 URL...');
+                updateProgress(10, '正在获取上传许可...');
+
+                const urlResponse = await fetch(`${API_BASE_URL}/generate-upload-url`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        filename: selectedFile.name,
+                        contentType: selectedFile.type,
+                    }),
+                });
+
+                if (!urlResponse.ok) {
+                    const errorData = await urlResponse.json().catch(() => ({ error: `获取上传URL失败，状态码: ${urlResponse.status}` }));
+                    throw new Error(errorData.error || `获取上传URL失败，状态码: ${urlResponse.status}`);
+                }
+
+                const uploadInfo = await urlResponse.json();
+                log(`预签名 URL 获取成功: ${uploadInfo.objectKey}`);
+                log(`公开访问 URL: ${uploadInfo.publicUrl}`);
+
+                // 第二步：上传文件到 R2
+                log('正在上传文件到 R2...');
+                updateProgress(20, '正在上传到云存储...');
+
+                const xhr = new XMLHttpRequest();
+
+                xhr.upload.addEventListener('progress', (event) => {
+                    if (event.lengthComputable) {
+                        const percentage = Math.round((event.loaded / event.total) * 60) + 20; // 20-80%
+                        updateProgress(percentage, `正在上传到云存储... ${Math.round((event.loaded / event.total) * 100)}%`);
+                    }
+                });
+
+                xhr.addEventListener('load', async () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        log('文件上传到 R2 成功！');
+                        updateProgress(80, '文件上传成功，正在启动分析...');
+
+                        // 第三步：提交视频 URL 到后端
+                        try {
+                            const submitResponse = await fetch(`${API_BASE_URL}/submit-video-url`, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({
+                                    videoUrl: uploadInfo.publicUrl,
+                                    originalFilename: selectedFile.name,
+                                    contentType: selectedFile.type,
+                                }),
+                            });
+
+                            if (!submitResponse.ok) {
+                                const errorData = await submitResponse.json().catch(() => ({ error: `提交视频URL失败，状态码: ${submitResponse.status}` }));
+                                throw new Error(errorData.error || `提交视频URL失败，状态码: ${submitResponse.status}`);
+                            }
+
+                            const result = await submitResponse.json();
+                            log(`分析任务已启动，Job ID: ${result.job_id}`);
+                            updateProgress(100, '上传完成，分析已启动！');
+
+                        } catch (error) {
+                            log(`提交视频 URL 失败: ${error.message}`);
+                            updateProgress(80, '上传成功，但启动分析失败');
+                        }
+
+                    } else {
+                        throw new Error(`上传失败，状态码: ${xhr.status}`);
+                    }
+                    uploadBtn.disabled = false;
+                });
+
+                xhr.addEventListener('error', () => {
+                    log('上传过程中发生网络错误');
+                    updateProgress(0, '上传失败');
+                    uploadBtn.disabled = false;
+                });
+
+                xhr.open('PUT', uploadInfo.uploadUrl);
+                xhr.setRequestHeader('Content-Type', selectedFile.type);
+                xhr.send(selectedFile);
+
+            } catch (error) {
+                log(`错误: ${error.message}`);
+                updateProgress(0, '操作失败');
+                uploadBtn.disabled = false;
+            }
+        });
+
+        log('R2 上传测试页面已加载');
+    </script>
+</body>
+
+</html>

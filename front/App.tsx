@@ -8,11 +8,15 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 import { ErrorMessage } from './components/ErrorMessage';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
+import { R2Uploader } from './utils/r2Upload';
 
 // Define a base URL for the backend API.
 // For Vercel, VITE_API_BASE_URL will be set in Environment Variables.
 // For local dev, it falls back to localhost.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5002/api';
+
+// Initialize R2 uploader
+const r2Uploader = new R2Uploader(API_BASE_URL);
 
 // Helper function to wait for the file to become active - REMOVED as backend handles this
 // async function waitForFileActive(ai: GoogleGenAI, fileName: string): Promise<GeminiFile> { ... }
@@ -98,7 +102,7 @@ const App: React.FC = () => {
     }
 
     setIsLoading(true);
-    setLoadingMessage('正在上传视频文件...');
+    setLoadingMessage('正在准备上传...');
     setError(null);
     setAnalysisReport(null);
     if (pollingIntervalRef.current) {
@@ -107,39 +111,19 @@ const App: React.FC = () => {
     }
 
     try {
-      const formData = new FormData();
-      formData.append('file', videoFile);
+      // 使用 R2 上传
+      const result = await r2Uploader.uploadAndSubmit(
+        videoFile,
+        (stage, progress) => {
+          if (progress) {
+            setLoadingMessage(`${stage} (${progress.percentage}%)`);
+          } else {
+            setLoadingMessage(stage);
+          }
+        }
+      );
 
-      const uploadResponse = await fetch(`${API_BASE_URL}/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!uploadResponse.ok) {
-        const errorData = await uploadResponse.json().catch(() => ({ error: `文件上传失败，状态码: ${uploadResponse.status}` }));
-        throw new Error(errorData.error || `文件上传失败，状态码: ${uploadResponse.status}`);
-      }
-      const uploadResult = await uploadResponse.json();
-      const { file_id, original_filename, mimetype } = uploadResult;
-
-      if (!file_id || !original_filename || !mimetype) {
-        throw new Error('后端未能成功处理上传的文件，缺少必要信息。');
-      }
-
-      setLoadingMessage('文件上传成功，正在启动分析...');
-
-      const analyzeResponse = await fetch(`${API_BASE_URL}/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ file_id, original_filename, mimetype }),
-      });
-
-      if (!analyzeResponse.ok) {
-        const errorData = await analyzeResponse.json().catch(() => ({ error: `启动分析失败，状态码: ${analyzeResponse.status}` }));
-        throw new Error(errorData.error || `启动分析失败，状态码: ${analyzeResponse.status}`);
-      }
-      const analyzeResult = await analyzeResponse.json();
-      const { job_id } = analyzeResult;
+      const { job_id } = result;
 
       if (!job_id) {
         throw new Error('后端未能成功启动分析任务。');

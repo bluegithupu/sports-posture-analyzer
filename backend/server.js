@@ -5,6 +5,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 const cors = require('cors');
+const AWS = require('aws-sdk');
 
 const { GoogleGenAI, createUserContent, createPartFromUri } = require('@google/genai');
 
@@ -77,14 +78,80 @@ if (GEMINI_API_KEY) {
     console.warn("GEMINI_API_KEY is not set. AI analysis features will be disabled.");
 }
 
+// Configure Cloudflare R2
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+const R2_PUB_URL = process.env.R2_PUB_URL;
+
+let s3Client;
+
+if (R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET_NAME && R2_ACCOUNT_ID) {
+    s3Client = new AWS.S3({
+        endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+        accessKeyId: R2_ACCESS_KEY_ID,
+        secretAccessKey: R2_SECRET_ACCESS_KEY,
+        region: 'auto',
+        signatureVersion: 'v4',
+    });
+    console.log("Cloudflare R2 client initialized.");
+} else {
+    console.warn("R2 configuration incomplete. R2 upload features will be disabled.");
+}
+
 const analysisJobs = {};
 
-async function performAnalysis(jobId, localFilePath, originalFilename, mimeType) {
+async function performAnalysisFromUrl(jobId, videoUrl, originalFilename, mimeType) {
     if (!ai) {
         analysisJobs[jobId] = { status: 'failed', error: 'Google GenAI SDK not initialized on server.' };
         return;
     }
 
+    try {
+        analysisJobs[jobId] = { status: 'processing', message: 'Downloading video from R2...' };
+        console.log(`[Job ${jobId}] Downloading video from URL: ${videoUrl}`);
+
+        // Download the file from R2 to a temporary location
+        const response = await fetch(videoUrl);
+        if (!response.ok) {
+            throw new Error(`Failed to download video: ${response.status} ${response.statusText}`);
+        }
+
+        const buffer = await response.arrayBuffer();
+        const tempFilePath = path.join(UPLOAD_DIR, `temp_${jobId}_${originalFilename}`);
+
+        // Write buffer to temporary file
+        fs.writeFileSync(tempFilePath, Buffer.from(buffer));
+
+        console.log(`[Job ${jobId}] Video downloaded to: ${tempFilePath}`);
+        analysisJobs[jobId] = { status: 'processing', message: 'Video downloaded, uploading to Google GenAI...' };
+
+        // Now use the existing analysis logic
+        await performAnalysisWithLocalFile(jobId, tempFilePath, originalFilename, mimeType);
+
+        // Clean up temporary file
+        try {
+            fs.unlinkSync(tempFilePath);
+            console.log(`[Job ${jobId}] Temporary file cleaned up: ${tempFilePath}`);
+        } catch (cleanupError) {
+            console.warn(`[Job ${jobId}] Failed to clean up temporary file: ${cleanupError.message}`);
+        }
+
+    } catch (error) {
+        console.error(`[Job ${jobId}] Analysis from URL error:`, error);
+
+        let errorMessage = error.message || 'An unknown error occurred during analysis.';
+        if (error.message && error.message.includes('Failed to download')) {
+            errorMessage = 'Failed to download video from R2. Please check the video URL.';
+        }
+
+        analysisJobs[jobId] = { status: 'failed', error: errorMessage };
+    }
+}
+
+async function performAnalysisWithLocalFile(jobId, localFilePath, originalFilename, mimeType) {
+    // This is the core analysis logic extracted from the original performAnalysis function
     try {
         analysisJobs[jobId] = { status: 'processing', message: 'Uploading file to Google GenAI...' };
         console.log(`[Job ${jobId}] Uploading file: ${localFilePath}`);
@@ -228,6 +295,11 @@ async function performAnalysis(jobId, localFilePath, originalFilename, mimeType)
     }
 }
 
+async function performAnalysis(jobId, localFilePath, originalFilename, mimeType) {
+    // Legacy function that calls the new core analysis function
+    await performAnalysisWithLocalFile(jobId, localFilePath, originalFilename, mimeType);
+}
+
 // Basic route
 app.get('/', (req, res) => {
     res.send('Backend for Sports Posture Analyzer is running (Node.js with Google GenAI Latest)!');
@@ -237,7 +309,109 @@ app.get('/api/hello', (req, res) => {
     res.json({ message: 'Hello from Node.js backend API with Google GenAI Latest' });
 });
 
-// File Upload API
+// Generate presigned URL for R2 upload
+app.post('/api/generate-upload-url', (req, res) => {
+    if (!s3Client) {
+        return res.status(500).json({ error: 'R2 not configured on the server.' });
+    }
+
+    const { filename, contentType } = req.body;
+
+    if (!filename || !contentType) {
+        return res.status(400).json({ error: 'Missing filename or contentType.' });
+    }
+
+    // Generate unique object key
+    const fileExtension = path.extname(filename);
+    const objectKey = `videos/${uuidv4()}${fileExtension}`;
+
+    // Generate presigned URL for PUT operation
+    const params = {
+        Bucket: R2_BUCKET_NAME,
+        Key: objectKey,
+        ContentType: contentType,
+        Expires: 300, // 5 minutes
+    };
+
+    try {
+        const uploadUrl = s3Client.getSignedUrl('putObject', params);
+
+        // Generate the public access URL
+        // Priority: R2_PUB_URL > R2_CUSTOM_DOMAIN > default R2 URL format
+        const R2_CUSTOM_DOMAIN = process.env.R2_CUSTOM_DOMAIN;
+        let publicUrl;
+
+        if (R2_PUB_URL) {
+            // Use configured pub URL if available
+            publicUrl = `${R2_PUB_URL}/${objectKey}`;
+        } else if (R2_CUSTOM_DOMAIN) {
+            // Use custom domain if configured
+            publicUrl = `https://${R2_CUSTOM_DOMAIN}/${objectKey}`;
+        } else {
+            // Use default R2 public URL format
+            publicUrl = `https://pub-${R2_ACCOUNT_ID}.r2.dev/${objectKey}`;
+        }
+
+        res.json({
+            uploadUrl,
+            objectKey,
+            publicUrl,
+            expiresIn: 300
+        });
+    } catch (error) {
+        console.error('Error generating presigned URL:', error);
+        res.status(500).json({ error: 'Failed to generate upload URL.' });
+    }
+});
+
+// Receive video URL from frontend after R2 upload
+app.post('/api/submit-video-url', (req, res) => {
+    const { videoUrl, originalFilename, contentType } = req.body;
+
+    if (!videoUrl || !originalFilename || !contentType) {
+        return res.status(400).json({ error: 'Missing videoUrl, originalFilename, or contentType.' });
+    }
+
+    // Validate URL format (basic check)
+    const R2_CUSTOM_DOMAIN = process.env.R2_CUSTOM_DOMAIN;
+    let isValidUrl = false;
+
+    if (R2_PUB_URL) {
+        // Check for configured pub URL
+        isValidUrl = videoUrl.startsWith(R2_PUB_URL);
+    } else if (R2_CUSTOM_DOMAIN) {
+        // Check for custom domain
+        isValidUrl = videoUrl.includes(R2_CUSTOM_DOMAIN);
+    } else {
+        // Check for default R2 public URL format
+        isValidUrl = videoUrl.includes(`pub-${R2_ACCOUNT_ID}.r2.dev`) ||
+            videoUrl.includes(`${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`);
+    }
+
+    if (!isValidUrl) {
+        return res.status(400).json({ error: 'Invalid video URL format.' });
+    }
+
+    // Generate job ID for analysis
+    const jobId = uuidv4();
+    analysisJobs[jobId] = {
+        status: 'pending',
+        message: 'Video URL received, starting analysis...',
+        videoUrl,
+        originalFilename,
+        contentType
+    };
+
+    // Start analysis with the video URL
+    performAnalysisFromUrl(jobId, videoUrl, originalFilename, contentType);
+
+    res.status(202).json({
+        message: "Video URL received and analysis started.",
+        job_id: jobId
+    });
+});
+
+// File Upload API (legacy, for backward compatibility)
 app.post('/api/upload', upload.single('file'), (req, res) => {
     if (!GEMINI_API_KEY) return res.status(500).json({ error: 'API key not configured on the server.' });
     if (!req.file) return res.status(400).json({ error: 'No file uploaded or file type was invalid.' });
