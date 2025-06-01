@@ -113,7 +113,7 @@ const analysisJobs = {};
 
 async function performAnalysisFromUrl(jobId, videoUrl, originalFilename, mimeType, dbEventId = null) {
     if (!ai) {
-        analysisJobs[jobId] = { status: 'failed', error: 'Google GenAI SDK not initialized on server.' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'failed', error: 'Google GenAI SDK not initialized on server.' };
         if (dbEventId) {
             await updateAnalysisEventStatus(dbEventId, 'failed', 'Google GenAI SDK not initialized on server.');
         }
@@ -121,7 +121,7 @@ async function performAnalysisFromUrl(jobId, videoUrl, originalFilename, mimeTyp
     }
 
     try {
-        analysisJobs[jobId] = { status: 'processing', message: 'Downloading video from R2...' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'processing', message: 'Downloading video from R2...' };
         console.log(`[Job ${jobId}] Downloading video from URL: ${videoUrl}`);
 
         // Download the file from R2 to a temporary location
@@ -137,7 +137,7 @@ async function performAnalysisFromUrl(jobId, videoUrl, originalFilename, mimeTyp
         fs.writeFileSync(tempFilePath, Buffer.from(buffer));
 
         console.log(`[Job ${jobId}] Video downloaded to: ${tempFilePath}`);
-        analysisJobs[jobId] = { status: 'processing', message: 'Video downloaded, uploading to Google GenAI...' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'processing', message: 'Video downloaded, uploading to Google GenAI...' };
 
         // Now use the existing analysis logic
         await performAnalysisWithLocalFile(jobId, tempFilePath, originalFilename, mimeType, dbEventId);
@@ -158,7 +158,7 @@ async function performAnalysisFromUrl(jobId, videoUrl, originalFilename, mimeTyp
             errorMessage = 'Failed to download video from R2. Please check the video URL.';
         }
 
-        analysisJobs[jobId] = { status: 'failed', error: errorMessage };
+        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'failed', error: errorMessage };
 
         // 更新数据库状态为失败
         if (dbEventId) {
@@ -170,7 +170,7 @@ async function performAnalysisFromUrl(jobId, videoUrl, originalFilename, mimeTyp
 async function performAnalysisWithLocalFile(jobId, localFilePath, originalFilename, mimeType, dbEventId = null) {
     // This is the core analysis logic extracted from the original performAnalysis function
     try {
-        analysisJobs[jobId] = { status: 'processing', message: 'Uploading file to Google GenAI...' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'processing', message: 'Uploading file to Google GenAI...' };
         console.log(`[Job ${jobId}] Uploading file: ${localFilePath}`);
 
         // Upload file using the latest API
@@ -183,7 +183,7 @@ async function performAnalysisWithLocalFile(jobId, localFilePath, originalFilena
         });
 
         console.log(`[Job ${jobId}] File uploaded. URI: ${uploadedFile.uri}`);
-        analysisJobs[jobId] = { status: 'processing', message: 'File uploaded. Waiting for processing...' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'processing', message: 'File uploaded. Waiting for processing...' };
 
         // 更新数据库中的 Gemini 文件链接
         if (dbEventId) {
@@ -220,7 +220,7 @@ async function performAnalysisWithLocalFile(jobId, localFilePath, originalFilena
             console.log(`[Job ${jobId}] File is ready. URI: ${fileInfo.uri}`);
         }
 
-        analysisJobs[jobId] = { status: 'processing', message: 'File ready. Starting AI analysis...' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'processing', message: 'File ready. Starting AI analysis...' };
 
         const prompt = `
 你是一位顶级的运动医学专家和体态教练。
@@ -307,11 +307,15 @@ async function performAnalysisWithLocalFile(jobId, localFilePath, originalFilena
             original_filename: originalFilename
         };
 
-        analysisJobs[jobId] = { status: 'completed', report: analysisText };
+        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'completed', report: analysisText };
 
         // 保存分析报告到数据库
+        console.log(`[Job ${jobId}] Attempting to update database with dbEventId: ${dbEventId}`);
         if (dbEventId) {
-            await completeAnalysisEvent(dbEventId, analysisReport);
+            const updateResult = await completeAnalysisEvent(dbEventId, analysisReport);
+            console.log(`[Job ${jobId}] Database update result:`, updateResult);
+        } else {
+            console.warn(`[Job ${jobId}] No dbEventId found, skipping database update`);
         }
 
     } catch (error) {
@@ -327,7 +331,7 @@ async function performAnalysisWithLocalFile(jobId, localFilePath, originalFilena
             errorMessage = 'File processing failed. Please try uploading the file again.';
         }
 
-        analysisJobs[jobId] = { status: 'failed', error: errorMessage };
+        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'failed', error: errorMessage };
 
         // 更新数据库状态为失败
         if (dbEventId) {

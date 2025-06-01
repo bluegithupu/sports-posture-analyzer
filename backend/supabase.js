@@ -126,28 +126,44 @@ async function updateAnalysisEventGeminiLink(eventId, geminiFileLink) {
  * @returns {Promise<{success: boolean, error?: string}>}
  */
 async function completeAnalysisEvent(eventId, analysisReport) {
+    console.log(`[completeAnalysisEvent] Starting update for event ${eventId}`);
+    console.log(`[completeAnalysisEvent] Report data:`, {
+        text_length: analysisReport?.text?.length || 0,
+        has_timestamp: !!analysisReport?.timestamp,
+        model_used: analysisReport?.model_used
+    });
+
     if (!supabase || !eventId) {
+        console.error(`[completeAnalysisEvent] Missing requirements: supabase=${!!supabase}, eventId=${!!eventId}`);
         return { success: false, error: "Database not configured or no event ID" };
     }
 
     try {
-        const { error } = await supabase
+        console.log(`[completeAnalysisEvent] Executing database update...`);
+        const { data, error } = await supabase
             .from('analysis_events')
             .update({
                 analysis_report: analysisReport,
                 status: 'completed'
             })
-            .eq('id', eventId);
+            .eq('id', eventId)
+            .select(); // 添加 select() 来返回更新后的数据
 
         if (error) {
-            console.error("Error completing analysis event:", error);
+            console.error(`[completeAnalysisEvent] Database error:`, error);
             return { success: false, error: error.message };
         }
 
-        console.log(`Analysis event ${eventId} completed`);
+        console.log(`[completeAnalysisEvent] Update successful for event ${eventId}. Updated rows:`, data?.length || 0);
+        if (data?.length === 0) {
+            console.warn(`[completeAnalysisEvent] No rows were updated. Event ID ${eventId} may not exist.`);
+            return { success: false, error: "Event ID not found in database" };
+        }
+
+        console.log(`Analysis event ${eventId} completed successfully`);
         return { success: true };
     } catch (err) {
-        console.error("Exception completing analysis event:", err);
+        console.error(`[completeAnalysisEvent] Exception:`, err);
         return { success: false, error: err.message };
     }
 }
