@@ -11,21 +11,15 @@ const { GoogleGenAI, createUserContent, createPartFromUri } = require('@google/g
 const app = express();
 
 // --- 配置 CORS ---
-const allowedOrigins = [
-    'http://localhost:5173', // 前端开发环境
-    'http://localhost:5002', // 后端自己
-    'https://sports-posture-analyzer-kooj.vercel.app', // Vercel 前端
-    // 如果有其他允许的域名，在这里添加
-];
+// const allowedOrigins = [  // 此数组在 origin:true 时不再直接用于来源检查
+//     'http://localhost:5173', // 前端开发环境
+//     'http://localhost:5002', // 后端自己
+//     'https://sports-posture-analyzer-kooj.vercel.app', // Vercel 前端
+//     // 如果有其他允许的域名，在这里添加
+// ];
 
 app.use(cors({
-    origin: function (origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
+    origin: true, // 动态设置 Access-Control-Allow-Origin 为请求的 Origin
     credentials: true, // 如果需要携带 cookies
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // 允许的方法
     allowedHeaders: ['Content-Type', 'Authorization'], // 允许的请求头
