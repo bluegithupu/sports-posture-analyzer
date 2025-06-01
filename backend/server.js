@@ -9,6 +9,15 @@ const AWS = require('aws-sdk');
 
 const { GoogleGenAI, createUserContent, createPartFromUri } = require('@google/genai');
 
+// Supabase 集成
+const {
+    createAnalysisEvent,
+    updateAnalysisEventStatus,
+    updateAnalysisEventGeminiLink,
+    completeAnalysisEvent,
+    getAnalysisHistory
+} = require('./supabase');
+
 const app = express();
 
 // --- 配置 CORS ---
@@ -102,9 +111,12 @@ if (R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET_NAME && R2_ACCOUNT_ID)
 
 const analysisJobs = {};
 
-async function performAnalysisFromUrl(jobId, videoUrl, originalFilename, mimeType) {
+async function performAnalysisFromUrl(jobId, videoUrl, originalFilename, mimeType, dbEventId = null) {
     if (!ai) {
         analysisJobs[jobId] = { status: 'failed', error: 'Google GenAI SDK not initialized on server.' };
+        if (dbEventId) {
+            await updateAnalysisEventStatus(dbEventId, 'failed', 'Google GenAI SDK not initialized on server.');
+        }
         return;
     }
 
@@ -128,7 +140,7 @@ async function performAnalysisFromUrl(jobId, videoUrl, originalFilename, mimeTyp
         analysisJobs[jobId] = { status: 'processing', message: 'Video downloaded, uploading to Google GenAI...' };
 
         // Now use the existing analysis logic
-        await performAnalysisWithLocalFile(jobId, tempFilePath, originalFilename, mimeType);
+        await performAnalysisWithLocalFile(jobId, tempFilePath, originalFilename, mimeType, dbEventId);
 
         // Clean up temporary file
         try {
@@ -147,10 +159,15 @@ async function performAnalysisFromUrl(jobId, videoUrl, originalFilename, mimeTyp
         }
 
         analysisJobs[jobId] = { status: 'failed', error: errorMessage };
+
+        // 更新数据库状态为失败
+        if (dbEventId) {
+            await updateAnalysisEventStatus(dbEventId, 'failed', errorMessage);
+        }
     }
 }
 
-async function performAnalysisWithLocalFile(jobId, localFilePath, originalFilename, mimeType) {
+async function performAnalysisWithLocalFile(jobId, localFilePath, originalFilename, mimeType, dbEventId = null) {
     // This is the core analysis logic extracted from the original performAnalysis function
     try {
         analysisJobs[jobId] = { status: 'processing', message: 'Uploading file to Google GenAI...' };
@@ -167,6 +184,11 @@ async function performAnalysisWithLocalFile(jobId, localFilePath, originalFilena
 
         console.log(`[Job ${jobId}] File uploaded. URI: ${uploadedFile.uri}`);
         analysisJobs[jobId] = { status: 'processing', message: 'File uploaded. Waiting for processing...' };
+
+        // 更新数据库中的 Gemini 文件链接
+        if (dbEventId) {
+            await updateAnalysisEventGeminiLink(dbEventId, uploadedFile.uri);
+        }
 
         // Wait for file to be processed
         let fileInfo = uploadedFile;
@@ -276,7 +298,21 @@ async function performAnalysisWithLocalFile(jobId, localFilePath, originalFilena
 
         const analysisText = response.text;
         console.log(`[Job ${jobId}] Analysis complete.`);
+
+        // 构造分析报告对象
+        const analysisReport = {
+            text: analysisText,
+            timestamp: new Date().toISOString(),
+            model_used: "gemini-2.5-flash-preview-05-20",
+            original_filename: originalFilename
+        };
+
         analysisJobs[jobId] = { status: 'completed', report: analysisText };
+
+        // 保存分析报告到数据库
+        if (dbEventId) {
+            await completeAnalysisEvent(dbEventId, analysisReport);
+        }
 
     } catch (error) {
         console.error(`[Job ${jobId}] Analysis error:`, error);
@@ -292,6 +328,11 @@ async function performAnalysisWithLocalFile(jobId, localFilePath, originalFilena
         }
 
         analysisJobs[jobId] = { status: 'failed', error: errorMessage };
+
+        // 更新数据库状态为失败
+        if (dbEventId) {
+            await updateAnalysisEventStatus(dbEventId, 'failed', errorMessage);
+        }
     }
 }
 
@@ -365,7 +406,7 @@ app.post('/api/generate-upload-url', (req, res) => {
 });
 
 // Receive video URL from frontend after R2 upload
-app.post('/api/submit-video-url', (req, res) => {
+app.post('/api/submit-video-url', async (req, res) => {
     const { videoUrl, originalFilename, contentType } = req.body;
 
     if (!videoUrl || !originalFilename || !contentType) {
@@ -392,6 +433,12 @@ app.post('/api/submit-video-url', (req, res) => {
         return res.status(400).json({ error: 'Invalid video URL format.' });
     }
 
+    // 首先在数据库中创建分析事件记录
+    const { id: dbEventId, error: dbError } = await createAnalysisEvent(videoUrl);
+    if (dbError) {
+        console.warn('Failed to create database record:', dbError);
+    }
+
     // Generate job ID for analysis
     const jobId = uuidv4();
     analysisJobs[jobId] = {
@@ -399,15 +446,17 @@ app.post('/api/submit-video-url', (req, res) => {
         message: 'Video URL received, starting analysis...',
         videoUrl,
         originalFilename,
-        contentType
+        contentType,
+        dbEventId // 保存数据库事件ID以便后续更新
     };
 
     // Start analysis with the video URL
-    performAnalysisFromUrl(jobId, videoUrl, originalFilename, contentType);
+    performAnalysisFromUrl(jobId, videoUrl, originalFilename, contentType, dbEventId);
 
     res.status(202).json({
         message: "Video URL received and analysis started.",
-        job_id: jobId
+        job_id: jobId,
+        db_event_id: dbEventId
     });
 });
 
@@ -450,6 +499,22 @@ app.get('/api/results/:jobId', (req, res) => {
     const job = analysisJobs[jobId];
     if (!job) return res.status(404).json({ error: 'Job ID not found.' });
     res.status(200).json(job);
+});
+
+// 获取分析历史记录
+app.get('/api/analysis-history', async (req, res) => {
+    const limit = parseInt(req.query.limit) || 10;
+    const { data, error } = await getAnalysisHistory(limit);
+
+    if (error) {
+        return res.status(500).json({ error: error });
+    }
+
+    res.status(200).json({
+        message: "Analysis history retrieved successfully.",
+        data: data,
+        count: data.length
+    });
 });
 
 app.listen(port, () => {

@@ -46,6 +46,7 @@
 - **Express.js**: Web 框架
 - **@google/genai**: Google AI SDK
 - **Multer**: 文件上传中间件
+- **@supabase/supabase-js**: Supabase 数据库客户端
 - **dotenv**: 环境变量管理
 - **uuid**: 唯一标识符生成
 
@@ -84,6 +85,8 @@
    # 创建环境变量文件
    touch .env
    echo "GEMINI_API_KEY=your_api_key_here" > .env
+   echo "SUPABASE_URL=your_supabase_project_url" >> .env
+   echo "SUPABASE_ANON_KEY=your_supabase_anon_key" >> .env
    ```
 
 4. **前端设置**
@@ -96,6 +99,18 @@
    echo "VITE_API_BASE_URL=http://localhost:5002/api" > .env
    ```
 
+5. **Supabase 数据库设置**
+   ```bash
+   # 在 Supabase 控制台中执行 SQL
+   # 使用 backend/supabase_schema.sql 中的 SQL 语句创建表结构
+   
+   # 获取 Supabase 项目信息
+   # 1. 访问 https://supabase.com/dashboard
+   # 2. 创建新项目或选择现有项目
+   # 3. 在 Settings > API 中获取 URL 和 anon key
+   # 4. 在 SQL Editor 中执行 supabase_schema.sql 的内容
+   ```
+
 ## 📁 代码结构
 
 ### 后端结构详解
@@ -103,6 +118,8 @@
 ```
 backend/
 ├── server.js              # 主服务器文件
+├── supabase.js            # Supabase 数据库操作模块
+├── supabase_schema.sql    # 数据库表结构 SQL
 ├── package.json           # 依赖和脚本配置
 ├── vercel.json            # Vercel 部署配置
 ├── .env                   # 环境变量 (不提交到 git)
@@ -235,6 +252,34 @@ GET /api/results/{job_id}
 {
   "status": "failed",
   "error": "错误描述"
+}
+```
+
+##### 5. 分析历史记录
+```http
+GET /api/analysis-history?limit=10
+```
+
+**响应:**
+```json
+{
+  "message": "Analysis history retrieved successfully.",
+  "data": [
+    {
+      "id": "uuid",
+      "created_at": "2024-01-01T00:00:00Z",
+      "r2_video_link": "https://r2.example.com/video.mp4",
+      "gemini_file_link": "https://generativelanguage.googleapis.com/v1beta/files/...",
+      "analysis_report": {
+        "text": "分析报告内容...",
+        "timestamp": "2024-01-01T00:00:00Z",
+        "model_used": "gemini-2.5-flash-preview-05-20"
+      },
+      "status": "completed",
+      "error_message": null
+    }
+  ],
+  "count": 1
 }
 ```
 
