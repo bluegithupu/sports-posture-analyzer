@@ -71,9 +71,17 @@ export async function POST(
         const processingJobId = uuidv4();
 
         // 从失败的阶段继续处理
-        const videoUrl = jobData.r2_video_link;
+        const videoUrl = jobData.r2_video_link as string;
         const originalFilename = getVideoFileName(videoUrl);
         const contentType = 'video/mp4'; // 默认类型，可以根据需要改进
+
+        // 验证videoUrl不为空
+        if (!videoUrl) {
+            return NextResponse.json(
+                { error: 'Video URL not found in job data.' },
+                { status: 400 }
+            );
+        }
 
         // 初始化处理任务状态
         setJob(processingJobId, {

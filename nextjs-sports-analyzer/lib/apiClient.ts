@@ -1,7 +1,7 @@
 // API 客户端工具
 // 提供统一的 API 调用接口，包含错误处理和类型安全
 
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
     success: boolean;
     data?: T;
     error?: string;
@@ -120,7 +120,7 @@ class ApiClient {
     }
 
     // 重试失败的任务
-    async retryJob(jobId: string): Promise<ApiResponse<any>> {
+    async retryJob(jobId: string): Promise<ApiResponse<unknown>> {
         return this.request(`/jobs/${jobId}/retry`, {
             method: 'POST',
         });

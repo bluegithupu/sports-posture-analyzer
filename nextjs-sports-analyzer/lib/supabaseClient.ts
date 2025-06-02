@@ -4,7 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
-let supabase: any = null;
+let supabase: ReturnType<typeof createClient> | null = null;
 
 // 初始化 Supabase 客户端
 if (supabaseUrl && supabaseKey) {
@@ -44,9 +44,10 @@ export async function createAnalysisEvent(r2VideoLink: string, geminiFileLink: s
 
         console.log("Analysis event created:", data.id);
         return { id: data.id };
-    } catch (err: any) {
-        console.error("Exception creating analysis event:", err);
-        return { id: null, error: err.message };
+    } catch (err: unknown) {
+        const error = err as Error;
+        console.error("Exception creating analysis event:", error);
+        return { id: null, error: error.message };
     }
 }
 
@@ -63,7 +64,7 @@ export async function updateAnalysisEventStatus(eventId: string, status: string,
     }
 
     try {
-        const updateData: any = { status };
+        const updateData: Record<string, unknown> = { status };
 
         // 如果传入 null，明确清除错误消息
         if (errorMessage === null) {
@@ -84,9 +85,10 @@ export async function updateAnalysisEventStatus(eventId: string, status: string,
 
         console.log(`Analysis event ${eventId} status updated to: ${status}${errorMessage === null ? ' (error message cleared)' : ''}`);
         return { success: true };
-    } catch (err: any) {
-        console.error("Exception updating analysis event status:", err);
-        return { success: false, error: err.message };
+    } catch (err: unknown) {
+        const error = err as Error;
+        console.error("Exception updating analysis event status:", error);
+        return { success: false, error: error.message };
     }
 }
 
@@ -117,9 +119,10 @@ export async function updateAnalysisEventGeminiLink(eventId: string, geminiFileL
 
         console.log(`Analysis event ${eventId} gemini link updated`);
         return { success: true };
-    } catch (err: any) {
-        console.error("Exception updating gemini file link:", err);
-        return { success: false, error: err.message };
+    } catch (err: unknown) {
+        const error = err as Error;
+        console.error("Exception updating gemini file link:", error);
+        return { success: false, error: error.message };
     }
 }
 
@@ -129,10 +132,10 @@ export async function updateAnalysisEventGeminiLink(eventId: string, geminiFileL
  * @param {object} analysisReport - 分析报告
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function completeAnalysisEvent(eventId: string, analysisReport: any) {
+export async function completeAnalysisEvent(eventId: string, analysisReport: Record<string, unknown>) {
     console.log(`[completeAnalysisEvent] Starting update for event ${eventId}`);
     console.log(`[completeAnalysisEvent] Report data:`, {
-        text_length: analysisReport?.text?.length || 0,
+        text_length: (analysisReport?.text as string)?.length || 0,
         has_timestamp: !!analysisReport?.timestamp,
         model_used: analysisReport?.model_used
     });
@@ -166,9 +169,10 @@ export async function completeAnalysisEvent(eventId: string, analysisReport: any
 
         console.log(`Analysis event ${eventId} completed successfully`);
         return { success: true };
-    } catch (err: any) {
-        console.error(`[completeAnalysisEvent] Exception:`, err);
-        return { success: false, error: err.message };
+    } catch (err: unknown) {
+        const error = err as Error;
+        console.error(`[completeAnalysisEvent] Exception:`, error);
+        return { success: false, error: error.message };
     }
 }
 
@@ -195,9 +199,10 @@ export async function getAnalysisHistory(limit: number = 10) {
         }
 
         return { data };
-    } catch (err: any) {
-        console.error("Exception fetching analysis history:", err);
-        return { data: [], error: err.message };
+    } catch (err: unknown) {
+        const error = err as Error;
+        console.error("Exception fetching analysis history:", error);
+        return { data: [], error: error.message };
     }
 }
 
@@ -224,8 +229,9 @@ export async function getAnalysisEventById(eventId: string) {
         }
 
         return { data };
-    } catch (err: any) {
-        console.error("Exception fetching analysis event by ID:", err);
-        return { data: null, error: err.message };
+    } catch (err: unknown) {
+        const error = err as Error;
+        console.error("Exception fetching analysis event by ID:", error);
+        return { data: null, error: error.message };
     }
 } 

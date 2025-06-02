@@ -151,6 +151,10 @@ export async function performCompleteAnalysis(
         console.log('Uploading file to Gemini...');
         const uploadedFile = await uploadFileToGemini(filePath, mimeType, displayName);
 
+        if (!uploadedFile || !uploadedFile.uri) {
+            throw new Error('Failed to upload file to Gemini: No URI returned');
+        }
+
         // 2. 等待文件处理完成
         console.log('Waiting for file processing...');
         await waitForFileProcessing(uploadedFile.uri);
@@ -173,10 +177,10 @@ export async function performAnalysisFromUrl(
     originalFilename: string,
     mimeType: string,
     dbEventId: string | null,
-    analysisJobs: Record<string, any>
+    analysisJobs: Record<string, unknown>
 ) {
     if (!ai) {
-        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'failed', error: 'Google GenAI SDK not initialized on server.' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId] as Record<string, unknown>, status: 'failed', error: 'Google GenAI SDK not initialized on server.' };
         if (dbEventId) {
             await updateAnalysisEventStatus(dbEventId, 'failed', 'Google GenAI SDK not initialized on server.');
         }
@@ -184,7 +188,7 @@ export async function performAnalysisFromUrl(
     }
 
     try {
-        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'processing', message: 'Downloading video from R2...' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId] as Record<string, unknown>, status: 'processing', message: 'Downloading video from R2...' };
         console.log(`[Job ${jobId}] Downloading video from URL: ${videoUrl}`);
 
         // 从 R2 下载文件到临时位置
@@ -200,7 +204,7 @@ export async function performAnalysisFromUrl(
         fs.writeFileSync(tempFilePath, Buffer.from(buffer));
 
         console.log(`[Job ${jobId}] Video downloaded to: ${tempFilePath}`);
-        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'processing', message: 'Video downloaded, uploading to Google GenAI...' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId] as Record<string, unknown>, status: 'processing', message: 'Video downloaded, uploading to Google GenAI...' };
 
         // 使用现有的分析逻辑
         await performAnalysisWithLocalFile(jobId, tempFilePath, originalFilename, mimeType, dbEventId, analysisJobs);
@@ -216,16 +220,16 @@ export async function performAnalysisFromUrl(
     } catch (error) {
         console.error(`[Job ${jobId}] Analysis from URL error:`, error);
 
-        let errorMessage = (error as Error).message || 'An unknown error occurred during analysis.';
-        if (errorMessage.includes('Failed to download')) {
-            errorMessage = 'Failed to download video from R2. Please check the video URL.';
-        }
+        const errorMessage = (error as Error).message || 'An unknown error occurred during analysis.';
+        const finalErrorMessage = errorMessage.includes('Failed to download')
+            ? 'Failed to download video from R2. Please check the video URL.'
+            : errorMessage;
 
-        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'failed', error: errorMessage };
+        analysisJobs[jobId] = { ...analysisJobs[jobId] as Record<string, unknown>, status: 'failed', error: finalErrorMessage };
 
         // 更新数据库状态为失败
         if (dbEventId) {
-            await updateAnalysisEventStatus(dbEventId, 'failed', errorMessage);
+            await updateAnalysisEventStatus(dbEventId, 'failed', finalErrorMessage);
         }
     }
 }
@@ -237,10 +241,10 @@ export async function performAnalysisWithLocalFile(
     originalFilename: string,
     mimeType: string,
     dbEventId: string | null,
-    analysisJobs: Record<string, any>
+    analysisJobs: Record<string, unknown>
 ) {
     try {
-        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'processing', message: 'Uploading file to Google GenAI...' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId] as Record<string, unknown>, status: 'processing', message: 'Uploading file to Google GenAI...' };
         console.log(`[Job ${jobId}] Uploading file: ${localFilePath}`);
 
         // 上传文件到 Gemini
@@ -251,7 +255,7 @@ export async function performAnalysisWithLocalFile(
         }
 
         console.log(`[Job ${jobId}] File uploaded. URI: ${uploadedFile.uri}`);
-        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'processing', message: 'File uploaded. Waiting for processing...' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId] as Record<string, unknown>, status: 'processing', message: 'File uploaded. Waiting for processing...' };
 
         // 更新数据库中的 Gemini 文件链接
         if (dbEventId) {
@@ -259,11 +263,11 @@ export async function performAnalysisWithLocalFile(
         }
 
         // 等待文件处理
-        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'processing', message: 'Waiting for file processing...' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId] as Record<string, unknown>, status: 'processing', message: 'Waiting for file processing...' };
         await waitForFileProcessing(uploadedFile.uri);
 
         // 进行分析
-        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'processing', message: 'Analyzing video content...' };
+        analysisJobs[jobId] = { ...analysisJobs[jobId] as Record<string, unknown>, status: 'processing', message: 'Analyzing video content...' };
         console.log(`[Job ${jobId}] Starting analysis...`);
 
         const analysisResult = await analyzeVideoWithGemini(uploadedFile.uri, mimeType);
@@ -276,7 +280,7 @@ export async function performAnalysisWithLocalFile(
         };
 
         analysisJobs[jobId] = {
-            ...analysisJobs[jobId],
+            ...analysisJobs[jobId] as Record<string, unknown>,
             status: 'completed',
             report: analysisResult,
             message: 'Analysis completed successfully!'
@@ -292,9 +296,9 @@ export async function performAnalysisWithLocalFile(
     } catch (error) {
         console.error(`[Job ${jobId}] Analysis error:`, error);
 
-        let errorMessage = (error as Error).message || 'An unknown error occurred during analysis.';
+        const errorMessage = (error as Error).message || 'An unknown error occurred during analysis.';
 
-        analysisJobs[jobId] = { ...analysisJobs[jobId], status: 'failed', error: errorMessage };
+        analysisJobs[jobId] = { ...analysisJobs[jobId] as Record<string, unknown>, status: 'failed', error: errorMessage };
 
         // 更新数据库状态为失败
         if (dbEventId) {

@@ -4,17 +4,6 @@ import { createAnalysisEvent } from '@/lib/supabaseClient';
 import { performAnalysisFromUrl } from '@/lib/genai';
 import { analysisJobs, setJob } from '@/lib/jobStorage';
 
-// 辅助函数：从URL中提取文件名
-function getVideoFileName(url: string): string {
-    try {
-        const urlParts = url.split('/');
-        const fileName = urlParts[urlParts.length - 1];
-        return fileName || 'unknown_file.mp4';
-    } catch {
-        return 'unknown_file.mp4';
-    }
-}
-
 export async function POST(request: NextRequest) {
     try {
         const { videoUrl, originalFilename, contentType } = await request.json();
@@ -70,7 +59,7 @@ export async function POST(request: NextRequest) {
         });
 
         // 启动分析任务
-        performAnalysisFromUrl(jobId, videoUrl, originalFilename, contentType, dbEventId, analysisJobs);
+        performAnalysisFromUrl(jobId, videoUrl, originalFilename, contentType, dbEventId as string | null, analysisJobs);
 
         return NextResponse.json({
             message: "Video URL received and analysis started.",
@@ -85,7 +74,4 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
-}
-
-// 导出 analysisJobs 以供其他 API 路由使用
-export { analysisJobs }; 
+} 

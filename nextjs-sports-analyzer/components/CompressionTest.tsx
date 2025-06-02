@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useRef } from 'react';
-import { VideoCompressor, CompressionOptions, CompressionProgress } from '../utils/videoCompression';
+import React, { useState } from 'react';
+import { VideoCompressor, CompressionOptions } from '../utils/videoCompression';
 
 export const CompressionTest: React.FC = () => {
     const [testFile, setTestFile] = useState<File | null>(null);

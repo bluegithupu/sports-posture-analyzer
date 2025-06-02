@@ -3,7 +3,6 @@
 import React, { useState } from 'react';
 import { AnalysisReport } from './AnalysisReport';
 import { useAnalysisHistory, useJobRetry } from '../lib/hooks';
-import { AnalysisEvent } from '../lib/apiClient';
 
 export const AnalysisHistory: React.FC = () => {
     const [selectedReport, setSelectedReport] = useState<string | null>(null);

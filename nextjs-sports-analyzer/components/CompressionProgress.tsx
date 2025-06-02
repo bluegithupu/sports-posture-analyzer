@@ -1,10 +1,10 @@
 "use client";
 
 import React from 'react';
-import { CompressionProgress } from '../utils/videoCompression';
+import { CompressionProgress as CompressionProgressType } from '../utils/videoCompression';
 
 interface CompressionProgressProps {
-    progress: CompressionProgress;
+    progress: CompressionProgressType;
     originalSize: number;
     isVisible: boolean;
     onCancel?: () => void;
