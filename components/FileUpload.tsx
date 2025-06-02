@@ -4,6 +4,7 @@ import React, { useRef, useState } from 'react';
 import { VideoCompressor, CompressionOptions, CompressionProgress } from '../utils/videoCompression';
 import { CompressionSettings } from './CompressionSettings';
 import { CompressionProgress as CompressionProgressComponent } from './CompressionProgress';
+import { COMPRESSION_CONFIG, shouldAutoCompress, getCompressionStatusText } from '../utils/compressionConfig';
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
@@ -14,30 +15,19 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
   const [isCompressing, setIsCompressing] = useState(false);
   const [compressionProgress, setCompressionProgress] = useState<CompressionProgress>({ progress: 0, stage: '' });
   const [showSettings, setShowSettings] = useState(false);
-  const [compressionSettings, setCompressionSettings] = useState<CompressionOptions>({
-    maxWidth: 1280,
-    maxHeight: 720,
-    quality: 0.6,
-    videoBitrate: 800000,
-    maxFileSize: 50
-  });
+  const [compressionSettings, setCompressionSettings] = useState<CompressionOptions>(
+    COMPRESSION_CONFIG.defaultSettings
+  );
   const [originalFile, setOriginalFile] = useState<File | null>(null);
-  const [enableCompression, setEnableCompression] = useState(true);
+  const [enableCompression, setEnableCompression] = useState(COMPRESSION_CONFIG.autoCompressionEnabled);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setOriginalFile(file);
 
-      // 检查文件大小，如果超过设定值且启用压缩，则进行压缩
-      const fileSizeMB = file.size / (1024 * 1024);
-      const shouldCompress = enableCompression && fileSizeMB > compressionSettings.maxFileSize!;
-
-      if (shouldCompress) {
-        await compressAndSelectFile(file);
-      } else {
-        onFileSelect(file);
-      }
+      // 取消自动压缩，直接选择文件
+      onFileSelect(file);
     }
   };
 
@@ -46,10 +36,31 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
       setIsCompressing(true);
       setCompressionProgress({ progress: 0, stage: '开始压缩...' });
 
+      // 添加详细的诊断信息
+      console.log('开始压缩文件:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        settings: compressionSettings
+      });
+
+      // 检查压缩支持
+      const isSupported = VideoCompressor.isCompressionSupported();
+      console.log('压缩支持检查:', isSupported);
+
+      if (!isSupported) {
+        console.error('浏览器不支持视频压缩功能');
+        throw new Error('浏览器不支持视频压缩功能');
+      }
+
+      const supportedFormats = VideoCompressor.getSupportedFormats();
+      console.log('支持的视频格式:', supportedFormats);
+
       const compressedFile = await VideoCompressor.compressVideo(
         file,
         compressionSettings,
         (progress) => {
+          console.log('压缩进度:', progress);
           setCompressionProgress(progress);
         }
       );
@@ -61,9 +72,40 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
 
       console.log(`压缩完成: ${originalSize} → ${compressedSize} (减少 ${reduction})`);
 
+      // 验证压缩结果
+      if (compressedFile.size === 0) {
+        throw new Error('压缩后的文件为空');
+      }
+
+      if (compressedFile.size >= file.size) {
+        console.warn('压缩后文件大小没有减少，可能是文件已经很小或压缩失败');
+      }
+
       onFileSelect(compressedFile);
     } catch (error) {
-      console.error('压缩失败:', error);
+      console.error('压缩失败，详细错误信息:', {
+        error: error,
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        settings: compressionSettings
+      });
+
+      // 显示用户友好的错误信息
+      let userMessage = '压缩失败，将使用原文件';
+      if (error instanceof Error) {
+        if (error.message.includes('不支持')) {
+          userMessage = '当前浏览器不支持视频压缩功能，将使用原文件';
+        } else if (error.message.includes('超时')) {
+          userMessage = '压缩超时，文件可能太大，将使用原文件';
+        } else if (error.message.includes('格式')) {
+          userMessage = '视频格式不支持压缩，将使用原文件';
+        }
+      }
+
+      console.log(userMessage);
       // 压缩失败时使用原文件
       onFileSelect(file);
     } finally {
@@ -108,10 +150,15 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
         </button>
         <p className="text-xs text-slate-400 mt-2 text-center">
           支持常见视频格式 (MP4, MOV, AVI, etc.)
-          {enableCompression && (
+          {enableCompression ? (
             <span className="block text-green-400 mt-1">
               <i className="fas fa-compress-alt mr-1"></i>
               自动压缩已启用
+            </span>
+          ) : (
+            <span className="block text-slate-400 mt-1">
+              <i className="fas fa-compress-alt mr-1"></i>
+              自动压缩已关闭
             </span>
           )}
         </p>
@@ -121,7 +168,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
       <div className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border border-slate-600">
         <div className="flex items-center space-x-2">
           <i className="fas fa-compress-alt text-sky-400"></i>
-          <span className="text-slate-300 text-sm">自动压缩大文件</span>
+          <span className="text-slate-300 text-sm">启用视频压缩 (手动控制)</span>
         </div>
         <label className="relative inline-flex items-center cursor-pointer">
           <input
@@ -138,15 +185,15 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
       <div className="p-3 bg-green-900/20 rounded-lg border border-green-600/30">
         <div className="flex items-center space-x-2 text-green-400">
           <i className="fas fa-cloud-upload-alt"></i>
-          <span className="text-sm font-medium">云存储上传已启用</span>
+          <span className="text-sm font-medium">云存储直接上传</span>
         </div>
         <p className="text-xs text-green-300 mt-1">
-          文件将直接上传到 Cloudflare R2 云存储，支持更大的文件和更快的上传速度。
+          文件将直接上传到 Cloudflare R2 云存储，无需压缩，支持更大的文件和更快的上传速度。
         </p>
       </div>
 
       {/* 压缩设置 */}
-      {enableCompression && (
+      {enableCompression && COMPRESSION_CONFIG.showCompressionSettings && (
         <CompressionSettings
           onSettingsChange={setCompressionSettings}
           isVisible={showSettings}
@@ -179,8 +226,14 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
             </div>
             <div className="flex justify-between">
               <span>状态:</span>
-              <span className={`${originalFile.size > (compressionSettings.maxFileSize! * 1024 * 1024) ? 'text-yellow-400' : 'text-green-400'}`}>
-                {originalFile.size > (compressionSettings.maxFileSize! * 1024 * 1024) ? '建议压缩' : '大小合适'}
+              <span className="text-green-400">
+                已选择，可直接使用
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>压缩状态:</span>
+              <span className={getCompressionStatusText(originalFile.size).color}>
+                {getCompressionStatusText(originalFile.size).text}
               </span>
             </div>
           </div>
