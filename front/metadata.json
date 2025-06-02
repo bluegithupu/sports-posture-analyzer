@@ -1,6 +1,0 @@
-{
-  "name": "运动姿态分析大师 (Sports Posture Analyzer)",
-  "description": "一个Web应用程序，允许用户上传运动视频，并通过Gemini API获取关于潜在体态问题的分析报告。 (A web application that allows users to upload sports videos and receive an analysis report on potential posture issues via the Gemini API.)",
-  "requestFramePermissions": [],
-  "prompt": ""
-}
