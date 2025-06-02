@@ -157,6 +157,23 @@ export function useVideoAnalysis() {
                 throw new Error('视频文件过大，最大支持5GB');
             }
 
+            // 0. 运行上传诊断
+            setUploadMessage('正在诊断上传环境...');
+            onProgress?.('正在诊断上传环境...');
+
+            try {
+                const { UploadDiagnosticTool } = await import('../utils/uploadDiagnostics');
+                const diagnostics = await UploadDiagnosticTool.runDiagnostics(file);
+
+                // 检查是否有高风险问题
+                const highRiskIssues = diagnostics.issues.filter(issue => issue.severity === 'high');
+                if (highRiskIssues.length > 0) {
+                    console.warn('⚠️ 检测到上传风险:', highRiskIssues);
+                }
+            } catch (diagError) {
+                console.warn('诊断失败，继续上传:', diagError);
+            }
+
             // 1. 获取上传URL
             setUploadMessage('正在准备上传...');
             onProgress?.('正在准备上传...');
@@ -170,10 +187,42 @@ export function useVideoAnalysis() {
 
             // 2. 上传文件到R2
             setUploadMessage('正在上传文件...');
-            onProgress?.('正在上传文件...', { percentage: 50 });
-            setUploadProgress(50);
+            onProgress?.('正在上传文件...', { percentage: 0 });
+            setUploadProgress(0);
 
-            const uploadSuccess = await apiClient.uploadToR2(uploadUrl, file);
+            const uploadSuccess = await apiClient.uploadToR2(uploadUrl, file, (progress) => {
+                const message = `正在上传文件... ${progress.percentage}%`;
+                let detailMessage = message;
+
+                if (progress.speed) {
+                    // 简单的字节格式化函数
+                    const formatBytes = (bytes: number): string => {
+                        if (bytes === 0) return '0 B';
+                        const k = 1024;
+                        const sizes = ['B', 'KB', 'MB', 'GB'];
+                        const i = Math.floor(Math.log(bytes) / Math.log(k));
+                        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+                    };
+
+                    const speedText = formatBytes(progress.speed);
+                    detailMessage += ` (${speedText}/s)`;
+
+                    if (progress.remainingTime && progress.remainingTime > 0) {
+                        const minutes = Math.floor(progress.remainingTime / 60);
+                        const seconds = Math.floor(progress.remainingTime % 60);
+                        if (minutes > 0) {
+                            detailMessage += ` - 剩余 ${minutes}:${seconds.toString().padStart(2, '0')}`;
+                        } else {
+                            detailMessage += ` - 剩余 ${seconds}秒`;
+                        }
+                    }
+                }
+
+                setUploadMessage(detailMessage);
+                setUploadProgress(progress.percentage);
+                onProgress?.(detailMessage, { percentage: progress.percentage });
+            });
+
             if (!uploadSuccess) {
                 throw new Error('文件上传失败');
             }

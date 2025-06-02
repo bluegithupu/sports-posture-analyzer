@@ -126,22 +126,97 @@ class ApiClient {
         });
     }
 
-    // 直接上传文件到R2
-    async uploadToR2(uploadUrl: string, file: File): Promise<boolean> {
+    // 直接上传文件到R2（带进度和优化）
+    async uploadToR2(
+        uploadUrl: string,
+        file: File,
+        onProgress?: (progress: { percentage: number; speed?: number; remainingTime?: number }) => void
+    ): Promise<boolean> {
         try {
-            const response = await fetch(uploadUrl, {
-                method: 'PUT',
-                body: file,
-                headers: {
-                    'Content-Type': file.type,
-                },
+            // 动态导入快速上传工具
+            const { FastUploader } = await import('../utils/fastUpload');
+
+            // 检测网络速度
+            console.log('正在检测网络速度...');
+            const networkSpeed = await FastUploader.detectNetworkSpeed();
+
+            // 获取最优配置
+            const config = FastUploader.getOptimalConfig(file.size, networkSpeed);
+
+            // 估算上传时间
+            const estimatedTime = FastUploader.estimateUploadTime(file.size, networkSpeed);
+
+            console.log(`开始优化上传:`, {
+                文件名: file.name,
+                文件大小: FastUploader.formatBytes(file.size),
+                网络速度: FastUploader.formatBytes(networkSpeed) + '/s',
+                预计时间: estimatedTime,
+                配置: config
             });
 
-            return response.ok;
+            return await FastUploader.uploadWithProgress(
+                file,
+                uploadUrl,
+                (progress) => {
+                    onProgress?.({
+                        percentage: progress.percentage,
+                        speed: progress.speed,
+                        remainingTime: progress.remainingTime,
+                    });
+                },
+                config
+            );
         } catch (error) {
-            console.error('R2上传错误:', error);
-            return false;
+            console.error('R2优化上传错误:', error);
+
+            // fallback 到简单上传
+            console.log('回退到简单上传模式');
+            return this.simpleUploadToR2(uploadUrl, file, onProgress);
         }
+    }
+
+    // 简单上传方法作为备用
+    private async simpleUploadToR2(
+        uploadUrl: string,
+        file: File,
+        onProgress?: (progress: { percentage: number; speed?: number; remainingTime?: number }) => void
+    ): Promise<boolean> {
+        return new Promise((resolve) => {
+            const xhr = new XMLHttpRequest();
+            const startTime = Date.now();
+
+            xhr.upload.addEventListener('progress', (event) => {
+                if (event.lengthComputable && onProgress) {
+                    const elapsed = (Date.now() - startTime) / 1000;
+                    const speed = event.loaded / elapsed;
+                    const remainingTime = (event.total - event.loaded) / speed;
+
+                    onProgress({
+                        percentage: Math.round((event.loaded / event.total) * 100),
+                        speed: Math.round(speed),
+                        remainingTime: Math.round(remainingTime),
+                    });
+                }
+            });
+
+            xhr.addEventListener('load', () => {
+                resolve(xhr.status >= 200 && xhr.status < 300);
+            });
+
+            xhr.addEventListener('error', () => {
+                console.error('Simple upload failed:', xhr.statusText);
+                resolve(false);
+            });
+
+            xhr.addEventListener('abort', () => {
+                console.error('Simple upload aborted');
+                resolve(false);
+            });
+
+            xhr.open('PUT', uploadUrl);
+            xhr.setRequestHeader('Content-Type', file.type);
+            xhr.send(file);
+        });
     }
 }
 
