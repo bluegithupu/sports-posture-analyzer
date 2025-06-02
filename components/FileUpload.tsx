@@ -4,7 +4,7 @@ import React, { useRef, useState } from 'react';
 import { VideoCompressor, CompressionOptions, CompressionProgress } from '../utils/videoCompression';
 import { CompressionSettings } from './CompressionSettings';
 import { CompressionProgress as CompressionProgressComponent } from './CompressionProgress';
-import { COMPRESSION_CONFIG, shouldAutoCompress, getCompressionStatusText } from '../utils/compressionConfig';
+import { COMPRESSION_CONFIG, getCompressionStatusText } from '../utils/compressionConfig';
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
