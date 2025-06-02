@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
 import { createAnalysisEvent } from '@/lib/supabaseClient';
 import { performAnalysisFromUrl } from '@/lib/genai';
-import { analysisJobs, setJob } from '@/lib/jobStorage';
 
 export async function POST(request: NextRequest) {
     try {
@@ -42,29 +40,32 @@ export async function POST(request: NextRequest) {
         }
 
         // 首先在数据库中创建分析事件记录
-        const { id: dbEventId, error: dbError } = await createAnalysisEvent(videoUrl);
-        if (dbError) {
-            console.warn('Failed to create database record:', dbError);
-        }
-
-        // 生成分析任务 ID
-        const jobId = uuidv4();
-        setJob(jobId, {
-            status: 'pending',
-            message: 'Video URL received, starting analysis...',
+        const { id: dbEventId, error: dbError } = await createAnalysisEvent(
             videoUrl,
             originalFilename,
-            contentType,
-            dbEventId // 保存数据库事件ID以便后续更新
-        });
+            contentType
+        );
 
-        // 启动分析任务
-        performAnalysisFromUrl(jobId, videoUrl, originalFilename, contentType, dbEventId as string | null, analysisJobs);
+        if (dbError || !dbEventId) {
+            console.error('Failed to create database record for analysis event:', dbError);
+            return NextResponse.json(
+                { error: `Failed to initialize analysis job: ${dbError || 'Unknown database error'}` },
+                { status: 500 }
+            );
+        }
+        console.log('Analysis event created in DB with ID:', dbEventId);
+
+        // 启动分析任务，使用 dbEventId 作为 jobId
+        performAnalysisFromUrl(
+            dbEventId,
+            videoUrl,
+            originalFilename,
+            contentType
+        );
 
         return NextResponse.json({
             message: "Video URL received and analysis started.",
-            job_id: jobId,
-            db_event_id: dbEventId
+            job_id: dbEventId,
         }, { status: 202 });
 
     } catch (error) {

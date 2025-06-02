@@ -9,7 +9,7 @@ export const AnalysisHistory: React.FC = () => {
     const [showReportModal, setShowReportModal] = useState(false);
 
     // 使用自定义Hooks
-    const { history, loading, error, refetch } = useAnalysisHistory(50);
+    const { history, loading, error, refetch } = useAnalysisHistory(10);
     const { retryJob, isRetrying } = useJobRetry();
 
 

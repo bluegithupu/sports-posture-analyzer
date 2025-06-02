@@ -18,9 +18,16 @@ if (supabaseUrl && supabaseKey) {
  * 创建新的分析事件记录
  * @param {string} r2VideoLink - R2 视频链接
  * @param {string} geminiFileLink - Gemini 文件链接（可选）
+ * @param {string} originalFilename - 原始文件名（新增）
+ * @param {string} contentType - 文件类型（新增）
  * @returns {Promise<{id: string, error?: string}>}
  */
-export async function createAnalysisEvent(r2VideoLink: string, geminiFileLink: string | null = null) {
+export async function createAnalysisEvent(
+    r2VideoLink: string,
+    originalFilename: string,
+    contentType: string,
+    geminiFileLink: string | null = null
+) {
     if (!supabase) {
         console.warn("Supabase not configured, skipping database insertion");
         return { id: null, error: "Database not configured" };
@@ -32,7 +39,10 @@ export async function createAnalysisEvent(r2VideoLink: string, geminiFileLink: s
             .insert({
                 r2_video_link: r2VideoLink,
                 gemini_file_link: geminiFileLink,
-                status: 'pending'
+                original_filename: originalFilename,
+                content_type: contentType,
+                status: 'pending',
+                status_text: 'Job submitted and pending processing.'
             })
             .select()
             .single();
@@ -56,9 +66,15 @@ export async function createAnalysisEvent(r2VideoLink: string, geminiFileLink: s
  * @param {string} eventId - 事件ID
  * @param {string} status - 新状态
  * @param {string} errorMessage - 错误消息（可选）
+ * @param {string} statusText - 状态文本（可选，新增）
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-export async function updateAnalysisEventStatus(eventId: string, status: string, errorMessage: string | null = null) {
+export async function updateAnalysisEventStatus(
+    eventId: string,
+    status: string,
+    errorMessage: string | null = null,
+    statusText: string | null = null
+) {
     if (!supabase || !eventId) {
         return { success: false, error: "Database not configured or no event ID" };
     }
@@ -71,6 +87,19 @@ export async function updateAnalysisEventStatus(eventId: string, status: string,
             updateData.error_message = null;
         } else if (errorMessage) {
             updateData.error_message = errorMessage;
+        }
+
+        // 更新 status_text (如果提供)
+        if (statusText !== null) {
+            updateData.status_text = statusText;
+        } else if (status === 'pending') {
+            updateData.status_text = 'Job is pending.';
+        } else if (status === 'processing') {
+            updateData.status_text = updateData.status_text || 'Job is processing...';
+        } else if (status === 'failed') {
+            updateData.status_text = updateData.status_text || 'Job failed.';
+        } else if (status === 'completed') {
+            updateData.status_text = 'Job completed successfully.';
         }
 
         const { error } = await supabase
@@ -108,7 +137,8 @@ export async function updateAnalysisEventGeminiLink(eventId: string, geminiFileL
             .from('analysis_events')
             .update({
                 gemini_file_link: geminiFileLink,
-                status: 'processing'
+                status: 'processing',
+                status_text: 'Gemini file link stored, awaiting GenAI processing.'
             })
             .eq('id', eventId);
 
@@ -151,10 +181,11 @@ export async function completeAnalysisEvent(eventId: string, analysisReport: Rec
             .from('analysis_events')
             .update({
                 analysis_report: analysisReport,
-                status: 'completed'
+                status: 'completed',
+                status_text: 'Analysis completed and report generated.'
             })
             .eq('id', eventId)
-            .select(); // 添加 select() 来返回更新后的数据
+            .select();
 
         if (error) {
             console.error(`[completeAnalysisEvent] Database error:`, error);
@@ -189,7 +220,7 @@ export async function getAnalysisHistory(limit: number = 10) {
     try {
         const { data, error } = await supabase
             .from('analysis_events')
-            .select('*')
+            .select('id, created_at, r2_video_link, status, error_message, analysis_report, original_filename, content_type, status_text')
             .order('created_at', { ascending: false })
             .limit(limit);
 
@@ -219,7 +250,7 @@ export async function getAnalysisEventById(eventId: string) {
     try {
         const { data, error } = await supabase
             .from('analysis_events')
-            .select('*')
+            .select('id, created_at, r2_video_link, status, error_message, analysis_report, gemini_file_link, original_filename, content_type, status_text')
             .eq('id', eventId)
             .single();
 

@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { v4 as uuidv4 } from 'uuid';
 import { getAnalysisEventById, updateAnalysisEventStatus } from '@/lib/supabaseClient';
 import { performAnalysisFromUrl } from '@/lib/genai';
-import { analysisJobs, setJob } from '@/lib/jobStorage';
 
 // 辅助函数：从URL中提取文件名
 function getVideoFileName(url: string): string {
@@ -17,12 +15,12 @@ function getVideoFileName(url: string): string {
 
 export async function POST(
     request: NextRequest,
-    { params }: { params: Promise<{ jobId: string }> }
+    { params }: { params: { jobId: string } }
 ) {
     try {
-        const { jobId } = await params;
+        const eventId = params.jobId;
 
-        if (!jobId) {
+        if (!eventId) {
             return NextResponse.json(
                 { error: 'Missing job ID.' },
                 { status: 400 }
@@ -30,7 +28,7 @@ export async function POST(
         }
 
         // 从数据库获取作业详情
-        const { data: jobData, error: fetchError } = await getAnalysisEventById(jobId);
+        const { data: jobData, error: fetchError } = await getAnalysisEventById(eventId);
 
         if (fetchError) {
             return NextResponse.json(
@@ -41,7 +39,7 @@ export async function POST(
 
         if (!jobData) {
             return NextResponse.json(
-                { error: 'Job not found.' },
+                { error: 'Job not found in database.' },
                 { status: 404 }
             );
         }
@@ -55,9 +53,10 @@ export async function POST(
 
         // 重置作业状态为 pending
         const { success: updateSuccess, error: updateError } = await updateAnalysisEventStatus(
-            jobId,
+            eventId,
             'pending',
-            null // 清除错误消息
+            null,
+            'Job retry requested, re-queued for processing.'
         );
 
         if (!updateSuccess) {
@@ -67,13 +66,10 @@ export async function POST(
             );
         }
 
-        // 生成新的处理 job ID
-        const processingJobId = uuidv4();
-
         // 从失败的阶段继续处理
         const videoUrl = jobData.r2_video_link as string;
-        const originalFilename = getVideoFileName(videoUrl);
-        const contentType = 'video/mp4'; // 默认类型，可以根据需要改进
+        const originalFilename = jobData.original_filename as string || 'unknown_file.mp4';
+        const contentType = jobData.content_type as string || 'video/mp4';
 
         // 验证videoUrl不为空
         if (!videoUrl) {
@@ -83,33 +79,17 @@ export async function POST(
             );
         }
 
-        // 初始化处理任务状态
-        setJob(processingJobId, {
-            status: 'pending',
-            message: 'Retry request received, restarting analysis...',
+        console.log(`[Retry ${eventId}] Starting retry for job. Video URL: ${videoUrl}, Original Filename: ${originalFilename}, ContentType: ${contentType}`);
+        performAnalysisFromUrl(
+            eventId,
             videoUrl,
             originalFilename,
-            contentType,
-            dbEventId: jobId // 使用原始的数据库事件ID
-        });
-
-        // 根据失败阶段决定从哪里重新开始
-        if (jobData.gemini_file_link) {
-            // 如果已经有 Gemini 文件链接，从分析阶段重新开始
-            console.log(`[Retry ${jobId}] Gemini file already exists, restarting from analysis phase`);
-            // 这里需要实现从 Gemini 文件开始分析的逻辑
-            // 暂时先重新完整执行
-            performAnalysisFromUrl(processingJobId, videoUrl, originalFilename, contentType, jobId, analysisJobs);
-        } else {
-            // 从头开始重新执行整个流程
-            console.log(`[Retry ${jobId}] Starting complete retry from beginning`);
-            performAnalysisFromUrl(processingJobId, videoUrl, originalFilename, contentType, jobId, analysisJobs);
-        }
+            contentType
+        );
 
         return NextResponse.json({
             message: "Job retry started successfully.",
-            original_job_id: jobId,
-            processing_job_id: processingJobId,
+            job_id: eventId,
             status: 'pending'
         }, { status: 202 });
 

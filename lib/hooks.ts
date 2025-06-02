@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { apiClient, AnalysisEvent, JobResult } from './apiClient';
 
 // 分析历史Hook
-export function useAnalysisHistory(limit: number = 50) {
+export function useAnalysisHistory(limit: number = 10) {
     const [history, setHistory] = useState<AnalysisEvent[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
