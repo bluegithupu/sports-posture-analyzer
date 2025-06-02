@@ -15,19 +15,40 @@ if (supabaseUrl && supabaseKey) {
 }
 
 /**
+ * 定义 AnalysisEvent 类型，如果它在其他地方没有被恰当地定义或导出
+ * 或者从 apiClient.ts 导入
+ */
+interface AnalysisEvent {
+    id: string;
+    created_at: string;
+    r2_video_link: string;
+    gemini_file_link?: string | null; // 允许 null
+    analysis_report?: { // 允许 null 或对象
+        text: string;
+        timestamp: string;
+        model_used: string;
+    } | null;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    error_message?: string | null; // 允许 null
+    original_filename?: string | null; // 新增，允许 null
+    content_type?: string | null; // 新增，允许 null
+    status_text?: string | null; // 新增，允许 null
+}
+
+/**
  * 创建新的分析事件记录
  * @param {string} r2VideoLink - R2 视频链接
  * @param {string} geminiFileLink - Gemini 文件链接（可选）
  * @param {string} originalFilename - 原始文件名（新增）
  * @param {string} contentType - 文件类型（新增）
- * @returns {Promise<{id: string, error?: string}>}
+ * @returns {Promise<{id: string | null, error?: string}>}
  */
 export async function createAnalysisEvent(
     r2VideoLink: string,
     originalFilename: string,
     contentType: string,
     geminiFileLink: string | null = null
-) {
+): Promise<{ id: string | null, error?: string }> {
     if (!supabase) {
         console.warn("Supabase not configured, skipping database insertion");
         return { id: null, error: "Database not configured" };
@@ -53,7 +74,7 @@ export async function createAnalysisEvent(
         }
 
         console.log("Analysis event created:", data.id);
-        return { id: data.id };
+        return { id: data.id as string };
     } catch (err: unknown) {
         const error = err as Error;
         console.error("Exception creating analysis event:", error);
@@ -240,9 +261,9 @@ export async function getAnalysisHistory(limit: number = 10) {
 /**
  * 根据事件ID获取分析事件详情
  * @param {string} eventId - 事件ID
- * @returns {Promise<{data: object, error?: string}>}
+ * @returns {Promise<{data: AnalysisEvent | null, error?: string}>}
  */
-export async function getAnalysisEventById(eventId: string) {
+export async function getAnalysisEventById(eventId: string): Promise<{ data: AnalysisEvent | null, error?: string }> {
     if (!supabase) {
         return { data: null, error: "Database not configured" };
     }
@@ -259,7 +280,7 @@ export async function getAnalysisEventById(eventId: string) {
             return { data: null, error: error.message };
         }
 
-        return { data };
+        return { data: data as AnalysisEvent | null };
     } catch (err: unknown) {
         const error = err as Error;
         console.error("Exception fetching analysis event by ID:", error);

@@ -5,10 +5,11 @@ import { JobResult } from '@/lib/apiClient'; // Assuming JobResult is defined he
 
 export async function GET(
     request: NextRequest,
-    context: { params: { jobId: string } } // Use context directly
+    { params }: { params: Promise<{ jobId: string }> }
 ) {
     try {
-        const eventId = context.params.jobId; // Access params from context
+        const { jobId } = await params;
+        const eventId = jobId;
 
         if (!eventId) {
             return NextResponse.json(

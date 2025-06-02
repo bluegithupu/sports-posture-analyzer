@@ -2,23 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAnalysisEventById, updateAnalysisEventStatus } from '@/lib/supabaseClient';
 import { performAnalysisFromUrl } from '@/lib/genai';
 
-// 辅助函数：从URL中提取文件名
-function getVideoFileName(url: string): string {
-    try {
-        const urlParts = url.split('/');
-        const fileName = urlParts[urlParts.length - 1];
-        return fileName || 'unknown_file.mp4';
-    } catch {
-        return 'unknown_file.mp4';
-    }
-}
-
 export async function POST(
     request: NextRequest,
-    { params }: { params: { jobId: string } }
+    { params }: { params: Promise<{ jobId: string }> }
 ) {
     try {
-        const eventId = params.jobId;
+        const { jobId } = await params;
+        const eventId = jobId;
 
         if (!eventId) {
             return NextResponse.json(
