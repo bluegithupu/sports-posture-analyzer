@@ -4,7 +4,7 @@ import React, { useRef, useState } from 'react';
 import { VideoCompressor, CompressionOptions, CompressionProgress } from '../utils/videoCompression';
 import { CompressionSettings } from './CompressionSettings';
 import { CompressionProgress as CompressionProgressComponent } from './CompressionProgress';
-import { COMPRESSION_CONFIG, getCompressionStatusText } from '../utils/compressionConfig';
+import { COMPRESSION_CONFIG, getCompressionStatusText, shouldAutoCompress } from '../utils/compressionConfig';
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
@@ -19,15 +19,20 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
     COMPRESSION_CONFIG.defaultSettings
   );
   const [originalFile, setOriginalFile] = useState<File | null>(null);
-  const [enableCompression, setEnableCompression] = useState(COMPRESSION_CONFIG.autoCompressionEnabled);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       const file = event.target.files[0];
       setOriginalFile(file);
 
-      // 取消自动压缩，直接选择文件
-      onFileSelect(file);
+      // 检查是否需要自动压缩
+      if (shouldAutoCompress(file.size)) {
+        console.log(`文件大小 ${VideoCompressor.formatFileSize(file.size)} 超过阈值，开始自动压缩...`);
+        await compressAndSelectFile(file);
+      } else {
+        console.log(`文件大小 ${VideoCompressor.formatFileSize(file.size)} 无需压缩，直接使用`);
+        onFileSelect(file);
+      }
     }
   };
 
@@ -150,10 +155,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
         </button>
         <p className="text-xs text-slate-400 mt-2 text-center">
           支持常见视频格式 (MP4, MOV, AVI, etc.)
-          {enableCompression ? (
-            <span className="block text-green-400 mt-1">
+          {COMPRESSION_CONFIG.autoCompressionEnabled ? (
+            <span className="block text-orange-400 mt-1">
               <i className="fas fa-compress-alt mr-1"></i>
-              自动压缩已启用
+              自动压缩已启用 - 大于{COMPRESSION_CONFIG.autoCompressionThreshold}MB的视频将自动压缩为最低质量
             </span>
           ) : (
             <span className="block text-slate-400 mt-1">
@@ -164,36 +169,41 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
         </p>
       </div>
 
-      {/* 压缩开关 */}
-      <div className="flex items-center justify-between p-3 bg-slate-800 rounded-lg border border-slate-600">
+      {/* 压缩状态显示 */}
+      <div className="p-3 bg-slate-800 rounded-lg border border-slate-600">
         <div className="flex items-center space-x-2">
-          <i className="fas fa-compress-alt text-sky-400"></i>
-          <span className="text-slate-300 text-sm">启用视频压缩 (手动控制)</span>
+          <i className="fas fa-compress-alt text-orange-400"></i>
+          <span className="text-slate-300 text-sm">自动压缩状态</span>
         </div>
-        <label className="relative inline-flex items-center cursor-pointer">
-          <input
-            type="checkbox"
-            checked={enableCompression}
-            onChange={(e) => setEnableCompression(e.target.checked)}
-            className="sr-only peer"
-          />
-          <div className="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-500"></div>
-        </label>
+        <div className="mt-2 text-xs text-slate-400">
+          {COMPRESSION_CONFIG.autoCompressionEnabled ? (
+            <div className="text-orange-300">
+              ✅ 已启用 - 超过 {COMPRESSION_CONFIG.autoCompressionThreshold}MB 的视频将自动压缩为最低质量
+              <div className="mt-1 text-slate-400">
+                压缩设置: 480p分辨率, 30%质量, 300kbps比特率
+              </div>
+            </div>
+          ) : (
+            <div className="text-slate-400">
+              ❌ 已禁用 - 视频将保持原始大小
+            </div>
+          )}
+        </div>
       </div>
 
       {/* R2 上传提示 */}
-      <div className="p-3 bg-green-900/20 rounded-lg border border-green-600/30">
-        <div className="flex items-center space-x-2 text-green-400">
+      <div className="p-3 bg-blue-900/20 rounded-lg border border-blue-600/30">
+        <div className="flex items-center space-x-2 text-blue-400">
           <i className="fas fa-cloud-upload-alt"></i>
-          <span className="text-sm font-medium">云存储直接上传</span>
+          <span className="text-sm font-medium">智能上传流程</span>
         </div>
-        <p className="text-xs text-green-300 mt-1">
-          文件将直接上传到 Cloudflare R2 云存储，无需压缩，支持更大的文件和更快的上传速度。
+        <p className="text-xs text-blue-300 mt-1">
+          大文件将自动压缩为最低质量以节省存储空间和上传时间，然后上传到 Cloudflare R2 云存储。
         </p>
       </div>
 
-      {/* 压缩设置 */}
-      {enableCompression && COMPRESSION_CONFIG.showCompressionSettings && (
+      {/* 压缩设置 - 仅在启用设置面板时显示 */}
+      {COMPRESSION_CONFIG.showCompressionSettings && (
         <CompressionSettings
           onSettingsChange={setCompressionSettings}
           isVisible={showSettings}
@@ -201,14 +211,14 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
         />
       )}
 
-      {/* 手动压缩按钮 */}
-      {originalFile && enableCompression && !isCompressing && (
+      {/* 重新压缩按钮 - 仅在文件较小时显示 */}
+      {originalFile && !shouldAutoCompress(originalFile.size) && !isCompressing && (
         <button
           onClick={handleManualCompress}
           className="w-full bg-sky-600 hover:bg-sky-500 text-white font-medium py-2 px-4 rounded-lg transition duration-300 ease-in-out flex items-center justify-center space-x-2"
         >
           <i className="fas fa-compress-alt"></i>
-          <span>手动压缩当前文件</span>
+          <span>手动压缩此文件</span>
         </button>
       )}
 
@@ -225,9 +235,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
               <span className="text-slate-300">{VideoCompressor.formatFileSize(originalFile.size)}</span>
             </div>
             <div className="flex justify-between">
-              <span>状态:</span>
+              <span>处理状态:</span>
               <span className="text-green-400">
-                已选择，可直接使用
+                {shouldAutoCompress(originalFile.size) ? '已自动压缩' : '已选择，无需压缩'}
               </span>
             </div>
             <div className="flex justify-between">
