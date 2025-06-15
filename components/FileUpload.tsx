@@ -19,7 +19,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
     COMPRESSION_CONFIG.defaultSettings
   );
   const [originalFile, setOriginalFile] = useState<File | null>(null);
-  const [enableCompression, setEnableCompression] = useState(COMPRESSION_CONFIG.autoCompressionEnabled);
 
   const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -203,8 +202,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
         </p>
       </div>
 
-      {/* 压缩设置 */}
-      {enableCompression && COMPRESSION_CONFIG.showCompressionSettings && (
+      {/* 压缩设置 - 仅在启用设置面板时显示 */}
+      {COMPRESSION_CONFIG.showCompressionSettings && (
         <CompressionSettings
           onSettingsChange={setCompressionSettings}
           isVisible={showSettings}
