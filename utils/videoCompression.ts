@@ -13,11 +13,11 @@ export interface CompressionProgress {
 
 export class VideoCompressor {
     private static readonly DEFAULT_OPTIONS: CompressionOptions = {
-        maxWidth: 1280,
-        maxHeight: 720,
-        quality: 0.6,
-        videoBitrate: 800000, // 800kbps
-        maxFileSize: 50 // 50MB
+        maxWidth: 854,        // 480p宽度，更小的分辨率
+        maxHeight: 480,       // 480p高度
+        quality: 0.3,         // 30%质量，更低的质量
+        videoBitrate: 300000, // 300kbps，更低的比特率
+        maxFileSize: 20       // 20MB，更小的目标文件大小
     };
 
     /**
