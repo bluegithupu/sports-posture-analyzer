@@ -24,11 +24,16 @@ interface AnalysisEvent {
     r2_video_link: string;
     gemini_file_link?: string | null; // 允许 null
     analysis_report?: { // 允许 null 或对象
+        // 统一使用 text 字段存储分析文本
         text: string;
+        // 保持向后兼容：旧的图片分析记录可能使用 analysis_text 字段
+        analysis_text?: string;
         timestamp: string;
         model_used: string;
-        analysis_type?: string; // 新增：分析类型 'video' | 'image'
-        image_count?: number; // 新增：图片数量
+        analysis_type?: string; // 分析类型 'video' | 'image'
+        image_count?: number; // 图片数量（仅图片分析）
+        processing_duration_ms?: number; // 处理时长（仅图片分析）
+        image_filenames?: string[]; // 图片文件名数组（仅图片分析）
     } | null;
     status: 'pending' | 'processing' | 'completed' | 'failed';
     error_message?: string | null; // 允许 null

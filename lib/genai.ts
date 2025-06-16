@@ -586,12 +586,13 @@ export async function performImageAnalysis(
         const analysisDuration = Date.now() - analysisStartTime;
         console.info(`${prefix} Image analysis completed. Duration: ${analysisDuration}ms`);
 
-        // 准备分析报告
+        // 准备分析报告 - 统一使用 text 字段以保持与视频分析的一致性
         const analysisReport = {
+            text: analysisText, // 统一使用 text 字段
+            timestamp: new Date().toISOString(), // 统一使用 timestamp 字段
+            model_used: 'gemini-2.0-flash', // 统一添加模型信息
             analysis_type: 'image' as const,
             image_count: images.length,
-            analysis_text: analysisText,
-            created_at: new Date().toISOString(),
             processing_duration_ms: analysisDuration,
             image_filenames: images.map(img => img.filename)
         };
