@@ -46,7 +46,7 @@ interface AnalysisEvent {
  * @returns {Promise<{data: AnalysisEvent | null, error?: string}>}
  */
 export async function createAnalysisEvent(eventData: {
-    r2_video_link: string;
+    r2_video_link?: string;
     original_filename?: string;
     content_type?: string;
     gemini_file_link?: string | null;
@@ -62,7 +62,7 @@ export async function createAnalysisEvent(eventData: {
 
     try {
         const insertData = {
-            r2_video_link: eventData.r2_video_link,
+            r2_video_link: eventData.r2_video_link || null,
             gemini_file_link: eventData.gemini_file_link || null,
             original_filename: eventData.original_filename || null,
             content_type: eventData.content_type || null,

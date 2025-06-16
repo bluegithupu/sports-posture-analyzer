@@ -459,7 +459,7 @@ export async function performAnalysisWithLocalFile(
 }
 
 // 图片分析功能
-export async function analyzeImages(images: Array<{url: string, filename: string, contentType: string}>): Promise<string> {
+export async function analyzeImages(images: Array<{ url: string, filename: string, contentType: string }>): Promise<string> {
     console.info(`Starting image analysis for ${images.length} images`);
 
     if (!ai) {
@@ -532,5 +532,74 @@ export async function analyzeImages(images: Array<{url: string, filename: string
     } catch (error) {
         console.error('Error analyzing images with Gemini:', error instanceof Error ? error.message : error, error);
         throw error;
+    }
+}
+
+// 执行完整的图片分析流程
+export async function performImageAnalysis(
+    jobId: string,
+    images: Array<{ url: string, filename: string, contentType: string }>
+) {
+    const prefix = logPrefix(jobId, jobId);
+    console.info(`${prefix} Starting performImageAnalysis. Images count: ${images.length}`);
+    const overallStartTime = Date.now();
+
+    try {
+        // 更新数据库状态为处理中
+        console.info(`${prefix} Updating Supabase status to PROCESSING.`);
+        try {
+            await updateAnalysisEventStatus(jobId, 'processing', 'AI正在分析图片...');
+            console.info(`${prefix} Supabase status updated to PROCESSING successfully.`);
+        } catch (dbError) {
+            console.error(`${prefix} Failed to update Supabase status to PROCESSING:`, dbError);
+            // Continue with analysis even if DB update fails
+        }
+
+        // 进行图片分析
+        console.info(`${prefix} Starting image analysis with Gemini...`);
+        const analysisStartTime = Date.now();
+        const analysisText = await analyzeImages(images);
+        const analysisDuration = Date.now() - analysisStartTime;
+        console.info(`${prefix} Image analysis completed. Duration: ${analysisDuration}ms`);
+
+        // 准备分析报告
+        const analysisReport = {
+            analysis_type: 'image' as const,
+            image_count: images.length,
+            analysis_text: analysisText,
+            created_at: new Date().toISOString(),
+            processing_duration_ms: analysisDuration,
+            image_filenames: images.map(img => img.filename)
+        };
+
+        console.info(`${prefix} Analysis report prepared. Updating Supabase to COMPLETED.`);
+
+        // 更新数据库
+        console.info(`${prefix} Attempting to update Supabase status to COMPLETED with report.`);
+        try {
+            await completeAnalysisEvent(jobId, analysisReport);
+            console.info(`${prefix} Supabase status and report updated to COMPLETED successfully.`);
+        } catch (dbError) {
+            console.error(`${prefix} CRITICAL: Failed to update Supabase status to COMPLETED:`, dbError);
+            // Consider if we need a fallback or retry for this DB update.
+        }
+
+        const overallDuration = Date.now() - overallStartTime;
+        console.info(`${prefix} performImageAnalysis finished successfully. Overall Duration: ${overallDuration}ms.`);
+
+    } catch (error) {
+        console.error(`${prefix} Error in performImageAnalysis:`, error instanceof Error ? error.message : error, error);
+
+        // 更新数据库状态为失败
+        try {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error during image analysis';
+            await updateAnalysisEventStatus(jobId, 'failed', `分析失败: ${errorMessage}`);
+            console.info(`${prefix} Supabase status updated to FAILED.`);
+        } catch (dbError) {
+            console.error(`${prefix} CRITICAL: Failed to update Supabase status to FAILED:`, dbError);
+        }
+
+        const overallDuration = Date.now() - overallStartTime;
+        console.info(`${prefix} performImageAnalysis finished with error. Overall Duration: ${overallDuration}ms.`);
     }
 }
