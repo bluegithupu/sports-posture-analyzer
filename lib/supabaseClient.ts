@@ -27,58 +27,69 @@ interface AnalysisEvent {
         text: string;
         timestamp: string;
         model_used: string;
+        analysis_type?: string; // 新增：分析类型 'video' | 'image'
+        image_count?: number; // 新增：图片数量
     } | null;
     status: 'pending' | 'processing' | 'completed' | 'failed';
     error_message?: string | null; // 允许 null
     original_filename?: string | null; // 新增，允许 null
     content_type?: string | null; // 新增，允许 null
     status_text?: string | null; // 新增，允许 null
+    analysis_type?: string | null; // 新增：分析类型字段
+    image_urls?: string[] | null; // 新增：图片URL数组
+    image_count?: number | null; // 新增：图片数量
 }
 
 /**
  * 创建新的分析事件记录
- * @param {string} r2VideoLink - R2 视频链接
- * @param {string} geminiFileLink - Gemini 文件链接（可选）
- * @param {string} originalFilename - 原始文件名（新增）
- * @param {string} contentType - 文件类型（新增）
- * @returns {Promise<{id: string | null, error?: string}>}
+ * @param {object} eventData - 事件数据
+ * @returns {Promise<{data: AnalysisEvent | null, error?: string}>}
  */
-export async function createAnalysisEvent(
-    r2VideoLink: string,
-    originalFilename: string,
-    contentType: string,
-    geminiFileLink: string | null = null
-): Promise<{ id: string | null, error?: string }> {
+export async function createAnalysisEvent(eventData: {
+    r2_video_link: string;
+    original_filename?: string;
+    content_type?: string;
+    gemini_file_link?: string | null;
+    status?: string;
+    analysis_type?: string;
+    image_urls?: string[];
+    image_count?: number;
+}): Promise<{ data: AnalysisEvent | null, error?: string }> {
     if (!supabase) {
         console.warn("Supabase not configured, skipping database insertion");
-        return { id: null, error: "Database not configured" };
+        return { data: null, error: "Database not configured" };
     }
 
     try {
+        const insertData = {
+            r2_video_link: eventData.r2_video_link,
+            gemini_file_link: eventData.gemini_file_link || null,
+            original_filename: eventData.original_filename || null,
+            content_type: eventData.content_type || null,
+            status: eventData.status || 'pending',
+            analysis_type: eventData.analysis_type || 'video',
+            image_urls: eventData.image_urls || null,
+            image_count: eventData.image_count || null,
+            status_text: 'Job submitted and pending processing.'
+        };
+
         const { data, error } = await supabase
             .from('analysis_events')
-            .insert({
-                r2_video_link: r2VideoLink,
-                gemini_file_link: geminiFileLink,
-                original_filename: originalFilename,
-                content_type: contentType,
-                status: 'pending',
-                status_text: 'Job submitted and pending processing.'
-            })
+            .insert(insertData)
             .select()
             .single();
 
         if (error) {
             console.error("Error creating analysis event:", error);
-            return { id: null, error: error.message };
+            return { data: null, error: error.message };
         }
 
         console.log("Analysis event created:", data.id);
-        return { id: data.id as string };
+        return { data: data as unknown as AnalysisEvent };
     } catch (err: unknown) {
         const error = err as Error;
         console.error("Exception creating analysis event:", error);
-        return { id: null, error: error.message };
+        return { data: null, error: error.message };
     }
 }
 
@@ -286,4 +297,35 @@ export async function getAnalysisEventById(eventId: string): Promise<{ data: Ana
         console.error("Exception fetching analysis event by ID:", error);
         return { data: null, error: error.message };
     }
-} 
+}
+
+/**
+ * 更新分析事件（通用函数）
+ * @param {string} eventId - 事件ID
+ * @param {object} updateData - 更新数据
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export async function updateAnalysisEvent(eventId: string, updateData: Partial<AnalysisEvent>) {
+    if (!supabase || !eventId) {
+        return { success: false, error: "Database not configured or no event ID" };
+    }
+
+    try {
+        const { error } = await supabase
+            .from('analysis_events')
+            .update(updateData)
+            .eq('id', eventId);
+
+        if (error) {
+            console.error("Error updating analysis event:", error);
+            return { success: false, error: error.message };
+        }
+
+        console.log(`Analysis event ${eventId} updated successfully`);
+        return { success: true };
+    } catch (err: unknown) {
+        const error = err as Error;
+        console.error("Exception updating analysis event:", error);
+        return { success: false, error: error.message };
+    }
+}

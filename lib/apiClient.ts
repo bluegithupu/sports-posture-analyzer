@@ -46,6 +46,18 @@ export interface SubmitVideoResponse {
     db_event_id: string;
 }
 
+export interface ImageInfo {
+    url: string;
+    filename: string;
+    contentType: string;
+}
+
+export interface SubmitImagesResponse {
+    message: string;
+    job_id: string;
+    db_event_id: string;
+}
+
 class ApiClient {
     private baseUrl: string;
 
@@ -106,6 +118,16 @@ class ApiClient {
         return this.request<SubmitVideoResponse>('/submit-video-url', {
             method: 'POST',
             body: JSON.stringify({ videoUrl, originalFilename, contentType }),
+        });
+    }
+
+    // 提交图片进行分析
+    async submitImages(
+        images: ImageInfo[]
+    ): Promise<ApiResponse<SubmitImagesResponse>> {
+        return this.request<SubmitImagesResponse>('/submit-images', {
+            method: 'POST',
+            body: JSON.stringify({ images }),
         });
     }
 

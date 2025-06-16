@@ -9,6 +9,7 @@ export const Navigation: React.FC = () => {
 
     const navItems = [
         { path: '/', label: '视频分析', icon: 'fas fa-video' },
+        { path: '/image-analysis', label: '图片分析', icon: 'fas fa-image' },
         { path: '/history', label: '历史记录', icon: 'fas fa-history' }
     ];
 
