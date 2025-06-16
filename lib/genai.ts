@@ -504,19 +504,43 @@ export async function analyzeImages(images: Array<{ url: string, filename: strin
         // 创建内容数组，包含所有图片
         const contentParts = [];
 
-        // 添加所有图片
+        // 下载并转换图片为base64
         for (let i = 0; i < images.length; i++) {
             const image = images[i];
-            console.info(`Adding image ${i + 1} to analysis: ${image.filename}`);
-            contentParts.push(createPartFromUri(image.url, image.contentType));
+            console.info(`Fetching and converting image ${i + 1} to base64: ${image.filename}`);
+
+            try {
+                // 下载图片
+                const response = await fetch(image.url);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+                }
+
+                // 转换为ArrayBuffer然后base64
+                const arrayBuffer = await response.arrayBuffer();
+                const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+                // 添加图片数据到内容数组
+                contentParts.push({
+                    inlineData: {
+                        data: base64,
+                        mimeType: image.contentType
+                    }
+                });
+
+                console.info(`Successfully converted image ${i + 1} to base64`);
+            } catch (fetchError) {
+                console.error(`Error fetching image ${i + 1}:`, fetchError);
+                throw new Error(`Failed to fetch image ${image.filename}: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`);
+            }
         }
 
         // 添加提示词
-        contentParts.push(fullPrompt);
+        contentParts.push({ text: fullPrompt });
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.0-flash',
-            contents: createUserContent(contentParts)
+            contents: [{ role: 'user', parts: contentParts }]
         });
 
         const duration = Date.now() - startTime;
