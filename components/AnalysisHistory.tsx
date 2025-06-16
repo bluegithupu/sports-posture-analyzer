@@ -44,7 +44,7 @@ export const AnalysisHistory: React.FC = () => {
     };
 
     // 获取报告文本 - 统一使用text字段，保持对旧图片分析记录(analysis_text)的向后兼容
-    const getReportText = (analysisReport: any) => {
+    const getReportText = (analysisReport: { text?: string; analysis_text?: string } | null | undefined) => {
         return analysisReport?.text || analysisReport?.analysis_text || null;
     };
 

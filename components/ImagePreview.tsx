@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import Image from 'next/image';
 
 interface ImagePreviewProps {
   images: File[];
@@ -46,13 +47,15 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ images, onRemoveImag
             {/* 图片容器 */}
             <div className="relative aspect-square bg-slate-800 rounded-lg overflow-hidden border border-slate-600">
               {imagePreviews[index] && (
-                <img
+                <Image
                   src={imagePreviews[index]}
                   alt={`预览图片 ${index + 1}`}
-                  className="w-full h-full object-cover"
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                 />
               )}
-              
+
               {/* 删除按钮 */}
               <button
                 onClick={() => onRemoveImage(index)}
