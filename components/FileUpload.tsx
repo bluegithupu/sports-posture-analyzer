@@ -148,17 +148,18 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
         <button
           onClick={handleClick}
           disabled={isCompressing}
-          className="w-full bg-slate-600 hover:bg-slate-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-sky-300 font-semibold py-3 px-4 rounded-lg border border-sky-400 hover:border-sky-300 disabled:border-slate-600 transition duration-300 ease-in-out flex items-center justify-center space-x-2"
+          className="w-full bg-slate-600 hover:bg-slate-500 disabled:bg-slate-700 disabled:cursor-not-allowed text-sky-300 font-semibold py-3 sm:py-4 px-4 rounded-lg border border-sky-400 hover:border-sky-300 disabled:border-slate-600 transition duration-300 ease-in-out flex items-center justify-center space-x-2 touch-target text-sm sm:text-base"
         >
-          <i className="fas fa-video"></i>
+          <i className="fas fa-video text-lg"></i>
           <span>{isCompressing ? '正在处理...' : '选择视频文件'}</span>
         </button>
-        <p className="text-xs text-slate-400 mt-2 text-center">
+        <p className="text-xs sm:text-sm text-slate-400 mt-2 text-center leading-relaxed">
           支持常见视频格式 (MP4, MOV, AVI, etc.)
           {COMPRESSION_CONFIG.autoCompressionEnabled ? (
             <span className="block text-orange-400 mt-1">
               <i className="fas fa-compress-alt mr-1"></i>
-              自动压缩已启用 - 大于{COMPRESSION_CONFIG.autoCompressionThreshold}MB的视频将自动压缩为最低质量
+              <span className="hidden sm:inline">自动压缩已启用 - 大于{COMPRESSION_CONFIG.autoCompressionThreshold}MB的视频将自动压缩为最低质量</span>
+              <span className="sm:hidden">自动压缩已启用 - 大文件将自动压缩</span>
             </span>
           ) : (
             <span className="block text-slate-400 mt-1">
@@ -170,17 +171,25 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect }) => {
       </div>
 
       {/* 压缩状态显示 */}
-      <div className="p-3 bg-slate-800 rounded-lg border border-slate-600">
+      <div className="p-3 sm:p-4 bg-slate-800 rounded-lg border border-slate-600">
         <div className="flex items-center space-x-2">
           <i className="fas fa-compress-alt text-orange-400"></i>
-          <span className="text-slate-300 text-sm">自动压缩状态</span>
+          <span className="text-slate-300 text-sm sm:text-base">自动压缩状态</span>
         </div>
-        <div className="mt-2 text-xs text-slate-400">
+        <div className="mt-2 text-xs sm:text-sm text-slate-400 leading-relaxed">
           {COMPRESSION_CONFIG.autoCompressionEnabled ? (
             <div className="text-orange-300">
-              ✅ 已启用 - 超过 {COMPRESSION_CONFIG.autoCompressionThreshold}MB 的视频将自动压缩为最低质量
-              <div className="mt-1 text-slate-400">
-                压缩设置: 480p分辨率, 30%质量, 300kbps比特率
+              <div className="hidden sm:block">
+                ✅ 已启用 - 超过 {COMPRESSION_CONFIG.autoCompressionThreshold}MB 的视频将自动压缩为最低质量
+                <div className="mt-1 text-slate-400">
+                  压缩设置: 480p分辨率, 30%质量, 300kbps比特率
+                </div>
+              </div>
+              <div className="sm:hidden">
+                ✅ 已启用 - 大文件自动压缩
+                <div className="mt-1 text-slate-400">
+                  480p, 30%质量, 300kbps
+                </div>
               </div>
             </div>
           ) : (
