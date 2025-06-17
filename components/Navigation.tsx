@@ -8,8 +8,8 @@ export const Navigation: React.FC = () => {
     const pathname = usePathname();
 
     const navItems = [
-        { path: '/', label: '视频分析', icon: 'fas fa-video' },
-        { path: '/image-analysis', label: '图片分析', icon: 'fas fa-image' },
+        { path: '/', label: '图片分析', icon: 'fas fa-image' },
+        { path: '/video-analysis', label: '视频分析', icon: 'fas fa-video' },
         { path: '/history', label: '历史记录', icon: 'fas fa-history' }
     ];
 
