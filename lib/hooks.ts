@@ -306,4 +306,124 @@ export function useJobRetry() {
         retryJob,
         isRetrying,
     };
-} 
+}
+
+// 图片上传和分析Hook
+export function useImageAnalysis() {
+    const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadMessage, setUploadMessage] = useState('');
+    const [error, setError] = useState<string | null>(null);
+
+    const uploadAndAnalyze = useCallback(async (
+        images: File[],
+        onProgress?: (stage: string, progress?: { percentage: number }) => void
+    ): Promise<string | null> => {
+        try {
+            setUploading(true);
+            setError(null);
+            setUploadProgress(0);
+
+            // 验证图片数量
+            if (images.length === 0) {
+                throw new Error('请至少选择一张图片');
+            }
+            if (images.length > 3) {
+                throw new Error('最多只能选择3张图片');
+            }
+
+            // 验证文件类型和大小
+            const MAX_SIZE = 10 * 1024 * 1024; // 10MB per image
+            for (const image of images) {
+                if (!image.type.startsWith('image/')) {
+                    throw new Error(`文件 ${image.name} 不是有效的图片格式`);
+                }
+                if (image.size > MAX_SIZE) {
+                    throw new Error(`图片 ${image.name} 过大，最大支持10MB`);
+                }
+            }
+
+            setUploadMessage('正在准备上传图片...');
+            onProgress?.('正在准备上传图片...');
+
+            // 上传所有图片并获取URL
+            const imageUrls: string[] = [];
+            const imageInfo: Array<{url: string, filename: string, contentType: string}> = [];
+
+            for (let i = 0; i < images.length; i++) {
+                const image = images[i];
+                const progressBase = (i / images.length) * 70; // 前70%用于上传
+
+                setUploadMessage(`正在上传第 ${i + 1} 张图片...`);
+                onProgress?.(`正在上传第 ${i + 1} 张图片...`, { percentage: progressBase });
+
+                // 获取上传URL
+                const uploadUrlResponse = await apiClient.generateUploadUrl(image.name, image.type);
+                if (!uploadUrlResponse.success || !uploadUrlResponse.data) {
+                    throw new Error(`获取第 ${i + 1} 张图片上传URL失败: ${uploadUrlResponse.error}`);
+                }
+
+                const { uploadUrl, publicUrl } = uploadUrlResponse.data;
+
+                // 上传图片
+                const uploadSuccess = await apiClient.uploadToR2(uploadUrl, image, (progress) => {
+                    const currentProgress = progressBase + (progress.percentage / images.length) * 0.7;
+                    setUploadProgress(currentProgress);
+                    onProgress?.(`正在上传第 ${i + 1} 张图片... ${progress.percentage}%`, { percentage: currentProgress });
+                });
+
+                if (!uploadSuccess) {
+                    throw new Error(`第 ${i + 1} 张图片上传失败`);
+                }
+
+                imageUrls.push(publicUrl);
+                imageInfo.push({
+                    url: publicUrl,
+                    filename: image.name,
+                    contentType: image.type
+                });
+            }
+
+            // 提交图片分析任务
+            setUploadMessage('正在启动图片分析...');
+            onProgress?.('正在启动图片分析...', { percentage: 80 });
+            setUploadProgress(80);
+
+            const submitResponse = await apiClient.submitImages(imageInfo);
+            if (!submitResponse.success || !submitResponse.data) {
+                throw new Error(submitResponse.error || '启动图片分析失败');
+            }
+
+            setUploadMessage('图片分析任务已启动');
+            onProgress?.('图片分析任务已启动', { percentage: 100 });
+            setUploadProgress(100);
+
+            return submitResponse.data.job_id;
+
+        } catch (err) {
+            console.error('图片分析错误:', err);
+            const errorMessage = err instanceof Error ? err.message : '图片分析时发生错误';
+            setError(errorMessage);
+            onProgress?.(`错误: ${errorMessage}`);
+            return null;
+        } finally {
+            setUploading(false);
+        }
+    }, []);
+
+    const reset = useCallback(() => {
+        setUploading(false);
+        setUploadProgress(0);
+        setUploadMessage('');
+        setError(null);
+    }, []);
+
+    return {
+        uploading,
+        uploadProgress,
+        uploadMessage,
+        error,
+        uploadAndAnalyze,
+        reset,
+    };
+}

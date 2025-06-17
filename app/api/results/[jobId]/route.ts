@@ -37,9 +37,13 @@ export async function GET(
         }
 
         // Adapt jobData from Supabase to the JobResult interface expected by the frontend hook
+        // Both video and image analysis now use the text field (unified structure)
+        // Keep backward compatibility for old image analysis records that used analysis_text
+        const reportText = jobData.analysis_report?.text || jobData.analysis_report?.analysis_text || undefined;
+
         const result: JobResult = {
             status: jobData.status as 'pending' | 'processing' | 'completed' | 'failed',
-            report: jobData.analysis_report?.text || undefined, // Assuming report is {text: string, ...}
+            report: reportText,
             error: jobData.error_message || undefined,
             message: jobData.status_text || undefined, // Use the new status_text field
             videoUrl: jobData.r2_video_link || undefined,

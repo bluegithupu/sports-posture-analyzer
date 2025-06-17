@@ -40,24 +40,26 @@ export async function POST(request: NextRequest) {
         }
 
         // 首先在数据库中创建分析事件记录
-        const { id: dbEventId, error: dbError } = await createAnalysisEvent(
-            videoUrl,
-            originalFilename,
-            contentType
-        );
+        const { data: dbEvent, error: dbError } = await createAnalysisEvent({
+            r2_video_link: videoUrl,
+            original_filename: originalFilename,
+            content_type: contentType,
+            status: 'pending',
+            analysis_type: 'video'
+        });
 
-        if (dbError || !dbEventId) {
+        if (dbError || !dbEvent) {
             console.error('Failed to create database record for analysis event:', dbError);
             return NextResponse.json(
                 { error: `Failed to initialize analysis job: ${dbError || 'Unknown database error'}` },
                 { status: 500 }
             );
         }
-        console.log('Analysis event created in DB with ID:', dbEventId);
+        console.log('Analysis event created in DB with ID:', dbEvent.id);
 
-        // 启动分析任务，使用 dbEventId 作为 jobId
+        // 启动分析任务，使用 dbEvent.id 作为 jobId
         performAnalysisFromUrl(
-            dbEventId,
+            dbEvent.id,
             videoUrl,
             originalFilename,
             contentType
@@ -65,7 +67,8 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             message: "Video URL received and analysis started.",
-            job_id: dbEventId,
+            job_id: dbEvent.id,
+            db_event_id: dbEvent.id
         }, { status: 202 });
 
     } catch (error) {

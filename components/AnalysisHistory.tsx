@@ -43,6 +43,11 @@ export const AnalysisHistory: React.FC = () => {
         }
     };
 
+    // 获取报告文本 - 统一使用text字段，保持对旧图片分析记录(analysis_text)的向后兼容
+    const getReportText = (analysisReport: { text?: string; analysis_text?: string } | null | undefined) => {
+        return analysisReport?.text || analysisReport?.analysis_text || null;
+    };
+
     // 查看报告
     const viewReport = (report: string) => {
         setSelectedReport(report);
@@ -221,9 +226,9 @@ export const AnalysisHistory: React.FC = () => {
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex space-x-2">
-                                                        {event.status === 'completed' && event.analysis_report?.text && (
+                                                        {event.status === 'completed' && getReportText(event.analysis_report) && (
                                                             <button
-                                                                onClick={() => viewReport(event.analysis_report!.text)}
+                                                                onClick={() => viewReport(getReportText(event.analysis_report)!)}
                                                                 className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-xs transition duration-200 flex items-center"
                                                             >
                                                                 <i className="fas fa-file-alt mr-1"></i>

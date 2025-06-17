@@ -456,4 +456,175 @@ export async function performAnalysisWithLocalFile(
         // const finalStatus = analysisJobs[jobId] ? (analysisJobs[jobId] as any).status : 'N/A'; // REMOVED
         console.info(`${prefix} performAnalysisWithLocalFile finished. Overall Duration: ${overallDuration}ms.`);
     }
-} 
+}
+
+// 图片分析功能
+export async function analyzeImages(images: Array<{ url: string, filename: string, contentType: string }>): Promise<string> {
+    console.info(`Starting image analysis for ${images.length} images`);
+
+    if (!ai) {
+        console.error('Google GenAI SDK not initialized during analyzeImages');
+        throw new Error('Google GenAI SDK not initialized');
+    }
+
+    if (!images || images.length === 0) {
+        throw new Error('No images provided for analysis');
+    }
+
+    if (images.length > 3) {
+        throw new Error('Maximum 3 images allowed for analysis');
+    }
+
+    // 构建分析提示词
+    const basePrompt = `请分析这${images.length === 1 ? '张运动图片' : `${images.length}张运动图片`}中的体态和动作。请提供详细的分析报告，包括：
+
+1. **动作识别**: 识别图片中的运动类型和具体动作
+2. **体态评估**: 分析身体姿势、对齐和平衡
+3. **技术要点**: 指出动作的关键技术要素
+4. **问题识别**: 发现可能的体态问题或动作错误
+5. **改进建议**: 提供具体的改进建议和训练要点
+6. **安全提醒**: 指出需要注意的安全事项`;
+
+    let specificPrompt = '';
+    if (images.length === 1) {
+        specificPrompt = '\n\n请针对这张图片进行详细的单帧分析，重点关注当前姿态的准确性和改进空间。';
+    } else {
+        specificPrompt = `\n\n这是${images.length}张图片的对比分析，请：
+- 比较不同图片中的动作差异
+- 分析动作的进步或退步
+- 提供连续性的改进建议
+- 指出动作序列中的关键变化点`;
+    }
+
+    const fullPrompt = basePrompt + specificPrompt + '\n\n请用中文回答，并提供结构化的分析报告。';
+
+    try {
+        const startTime = Date.now();
+
+        // 创建内容数组，包含所有图片
+        const contentParts = [];
+
+        // 下载并转换图片为base64
+        for (let i = 0; i < images.length; i++) {
+            const image = images[i];
+            console.info(`Fetching and converting image ${i + 1} to base64: ${image.filename}`);
+
+            try {
+                // 下载图片
+                const response = await fetch(image.url);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+                }
+
+                // 转换为ArrayBuffer然后base64
+                const arrayBuffer = await response.arrayBuffer();
+                const base64 = Buffer.from(arrayBuffer).toString('base64');
+
+                // 添加图片数据到内容数组
+                contentParts.push({
+                    inlineData: {
+                        data: base64,
+                        mimeType: image.contentType
+                    }
+                });
+
+                console.info(`Successfully converted image ${i + 1} to base64`);
+            } catch (fetchError) {
+                console.error(`Error fetching image ${i + 1}:`, fetchError);
+                throw new Error(`Failed to fetch image ${image.filename}: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`);
+            }
+        }
+
+        // 添加提示词
+        contentParts.push({ text: fullPrompt });
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents: [{ role: 'user', parts: contentParts }]
+        });
+
+        const duration = Date.now() - startTime;
+        const analysisText = response.text;
+        console.info(`Image analysis successful. Duration: ${duration}ms. Response received: ${analysisText ? 'Yes' : 'No (Empty)'}`);
+
+        if (!analysisText) {
+            console.error('No analysis text received from Gemini for images');
+            throw new Error('No analysis text received from Gemini');
+        }
+
+        return analysisText;
+    } catch (error) {
+        console.error('Error analyzing images with Gemini:', error instanceof Error ? error.message : error, error);
+        throw error;
+    }
+}
+
+// 执行完整的图片分析流程
+export async function performImageAnalysis(
+    jobId: string,
+    images: Array<{ url: string, filename: string, contentType: string }>
+) {
+    const prefix = logPrefix(jobId, jobId);
+    console.info(`${prefix} Starting performImageAnalysis. Images count: ${images.length}`);
+    const overallStartTime = Date.now();
+
+    try {
+        // 更新数据库状态为处理中
+        console.info(`${prefix} Updating Supabase status to PROCESSING.`);
+        try {
+            await updateAnalysisEventStatus(jobId, 'processing', 'AI正在分析图片...');
+            console.info(`${prefix} Supabase status updated to PROCESSING successfully.`);
+        } catch (dbError) {
+            console.error(`${prefix} Failed to update Supabase status to PROCESSING:`, dbError);
+            // Continue with analysis even if DB update fails
+        }
+
+        // 进行图片分析
+        console.info(`${prefix} Starting image analysis with Gemini...`);
+        const analysisStartTime = Date.now();
+        const analysisText = await analyzeImages(images);
+        const analysisDuration = Date.now() - analysisStartTime;
+        console.info(`${prefix} Image analysis completed. Duration: ${analysisDuration}ms`);
+
+        // 准备分析报告 - 统一使用 text 字段以保持与视频分析的一致性
+        const analysisReport = {
+            text: analysisText, // 统一使用 text 字段
+            timestamp: new Date().toISOString(), // 统一使用 timestamp 字段
+            model_used: 'gemini-2.0-flash', // 统一添加模型信息
+            analysis_type: 'image' as const,
+            image_count: images.length,
+            processing_duration_ms: analysisDuration,
+            image_filenames: images.map(img => img.filename)
+        };
+
+        console.info(`${prefix} Analysis report prepared. Updating Supabase to COMPLETED.`);
+
+        // 更新数据库
+        console.info(`${prefix} Attempting to update Supabase status to COMPLETED with report.`);
+        try {
+            await completeAnalysisEvent(jobId, analysisReport);
+            console.info(`${prefix} Supabase status and report updated to COMPLETED successfully.`);
+        } catch (dbError) {
+            console.error(`${prefix} CRITICAL: Failed to update Supabase status to COMPLETED:`, dbError);
+            // Consider if we need a fallback or retry for this DB update.
+        }
+
+        const overallDuration = Date.now() - overallStartTime;
+        console.info(`${prefix} performImageAnalysis finished successfully. Overall Duration: ${overallDuration}ms.`);
+
+    } catch (error) {
+        console.error(`${prefix} Error in performImageAnalysis:`, error instanceof Error ? error.message : error, error);
+
+        // 更新数据库状态为失败
+        try {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error during image analysis';
+            await updateAnalysisEventStatus(jobId, 'failed', `分析失败: ${errorMessage}`);
+            console.info(`${prefix} Supabase status updated to FAILED.`);
+        } catch (dbError) {
+            console.error(`${prefix} CRITICAL: Failed to update Supabase status to FAILED:`, dbError);
+        }
+
+        const overallDuration = Date.now() - overallStartTime;
+        console.info(`${prefix} performImageAnalysis finished with error. Overall Duration: ${overallDuration}ms.`);
+    }
+}

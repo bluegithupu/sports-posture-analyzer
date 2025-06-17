@@ -14,9 +14,16 @@ export interface AnalysisEvent {
     r2_video_link: string;
     gemini_file_link?: string;
     analysis_report?: {
+        // 统一使用 text 字段存储分析文本
         text: string;
+        // 保持向后兼容：旧的图片分析记录可能使用 analysis_text 字段
+        analysis_text?: string;
         timestamp: string;
         model_used: string;
+        analysis_type?: string;
+        image_count?: number;
+        processing_duration_ms?: number;
+        image_filenames?: string[];
     };
     status: 'pending' | 'processing' | 'completed' | 'failed';
     error_message?: string;
@@ -41,6 +48,18 @@ export interface UploadUrlResponse {
 }
 
 export interface SubmitVideoResponse {
+    message: string;
+    job_id: string;
+    db_event_id: string;
+}
+
+export interface ImageInfo {
+    url: string;
+    filename: string;
+    contentType: string;
+}
+
+export interface SubmitImagesResponse {
     message: string;
     job_id: string;
     db_event_id: string;
@@ -106,6 +125,16 @@ class ApiClient {
         return this.request<SubmitVideoResponse>('/submit-video-url', {
             method: 'POST',
             body: JSON.stringify({ videoUrl, originalFilename, contentType }),
+        });
+    }
+
+    // 提交图片进行分析
+    async submitImages(
+        images: ImageInfo[]
+    ): Promise<ApiResponse<SubmitImagesResponse>> {
+        return this.request<SubmitImagesResponse>('/submit-images', {
+            method: 'POST',
+            body: JSON.stringify({ images }),
         });
     }
 
