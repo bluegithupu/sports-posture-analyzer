@@ -7,7 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { updateAnalysisEventStatus, updateAnalysisEventGeminiLink, completeAnalysisEvent } from './supabaseClient';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY!;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
 if (!GEMINI_API_KEY) {
@@ -122,29 +122,138 @@ export async function waitForFileProcessing(fileUri: string, maxWaitTime: number
     throw new Error(`File processing timeout for ${fileUri}`);
 }
 
-export async function analyzeVideoWithGemini(fileUri: string, mimeType: string = 'video/mp4', jobId?: string, dbEventId?: string | null): Promise<string> {
+/**
+ * 统一的分析提示词生成函数
+ *
+ * 这个函数为视频和图片分析生成统一的AI提示词模板，确保分析的一致性和质量。
+ *
+ * @param mediaType - 媒体类型：'video' 或 'image'
+ * @param mediaCount - 媒体数量，对于视频始终为1，对于图片可以是1-3
+ * @returns 生成的分析提示词字符串
+ *
+ * @example
+ * // 生成视频分析提示词
+ * const videoPrompt = generateAnalysisPrompt('video', 1);
+ *
+ * // 生成单张图片分析提示词
+ * const imagePrompt = generateAnalysisPrompt('image', 1);
+ *
+ * // 生成多张图片对比分析提示词
+ * const multiImagePrompt = generateAnalysisPrompt('image', 3);
+ */
+export function generateAnalysisPrompt(mediaType: 'video' | 'image', mediaCount: number = 1): string {
+    const mediaDescription = mediaType === 'video'
+        ? '运动视频'
+        : mediaCount === 1
+            ? '张运动图片'
+            : `${mediaCount}张运动图片`;
+
+    const rolePrompt = `你是一位拥有20年经验的专业运动姿态与体态分析大师，具备以下专业资质：
+- 运动生物力学博士学位
+- 国际认证的运动康复师和体态矫正专家
+- 曾为奥运选手和职业运动员提供姿态分析服务
+- 精通人体解剖学、运动力学和损伤预防
+
+作为专业的运动姿态分析师，请对这${mediaType === 'video' ? '个' : ''}${mediaDescription}进行深度的专业分析。`;
+
+    const basePrompt = `
+
+## 专业分析报告
+
+### 1. **运动项目识别与动作分解**
+- 准确识别运动项目类型和具体动作名称
+- 分解动作的各个技术阶段（准备期、主要用力期、结束期）
+- 分析动作的生物力学特征
+
+### 2. **体态与姿势评估**
+- **脊柱对齐**: 评估颈椎、胸椎、腰椎的生理曲度
+- **骨盆位置**: 分析骨盆前倾、后倾或侧倾情况
+- **肩胛骨稳定性**: 检查肩胛骨位置和活动模式
+- **关节对齐**: 评估主要关节（踝、膝、髋、肩）的对齐状态
+- **肌肉平衡**: 识别可能的肌肉失衡模式
+
+### 3. **动作技术分析**
+- **力量传递链**: 分析动力链的完整性和效率
+- **时序协调**: 评估各身体部位的协调配合
+- **稳定性控制**: 分析核心稳定性和平衡控制
+- **动作幅度**: 评估关节活动度是否充分且安全
+
+### 4. **问题识别与风险评估**
+- **代偿模式**: 识别异常的代偿动作模式
+- **潜在损伤风险**: 基于动作模式预测可能的损伤风险
+- **技术缺陷**: 指出影响运动表现的技术问题
+- **功能性限制**: 识别可能的功能性活动限制
+
+### 5. **专业改进方案**
+- **矫正性训练**: 提供针对性的矫正训练建议
+- **强化训练**: 推荐相应的力量和稳定性训练
+- **柔韧性改善**: 建议特定的拉伸和活动度训练
+- **技术优化**: 提供具体的技术改进要点
+
+### 6. **专业安全建议**
+- **即时注意事项**: 需要立即关注的安全问题
+- **训练负荷管理**: 合理的训练强度和频率建议
+- **预防性措施**: 预防运动损伤的具体措施
+- **专业咨询建议**: 是否需要寻求进一步的专业医疗或康复指导`;
+
+    let specificPrompt = '';
+    if (mediaType === 'video') {
+        specificPrompt = `
+
+### 视频动态分析重点：
+- 分析整个动作序列的流畅性和连贯性
+- 评估动作节奏和时序控制
+- 观察疲劳状态下的动作变化
+- 识别动作过程中的稳定性变化
+- 分析重复动作的一致性`;
+    } else if (mediaCount === 1) {
+        specificPrompt = `
+
+### 静态姿态分析重点：
+- 进行精确的单帧姿态评估
+- 分析当前姿态的生物力学合理性
+- 评估静态稳定性和平衡状态
+- 识别姿态维持的肌肉激活模式
+- 预测从当前姿态转换到动作的风险`;
+    } else {
+        specificPrompt = `
+
+### 多图片对比分析重点：
+- 对比分析${mediaCount}张图片中的姿态变化
+- 评估动作学习进程和技术改善情况
+- 识别一致性问题和变异模式
+- 分析不同阶段的技术特点
+- 提供基于进展的个性化建议`;
+    }
+
+    return rolePrompt + basePrompt + specificPrompt + `
+
+---
+**请以专业运动姿态分析师的身份，用中文提供详细、准确、实用的专业评估报告。报告应具备科学性、专业性和实操性。**`;
+}
+
+// 统一的媒体分析函数（支持视频和图片）
+export async function analyzeMediaWithGemini(
+    fileUri: string,
+    mimeType: string,
+    mediaType: 'video' | 'image' = 'video',
+    jobId?: string,
+    dbEventId?: string | null
+): Promise<string> {
     const prefix = logPrefix(jobId, dbEventId);
-    console.info(`${prefix} Starting video analysis with Gemini. URI: ${fileUri}, MimeType: ${mimeType}`);
+    console.info(`${prefix} Starting ${mediaType} analysis with Gemini. URI: ${fileUri}, MimeType: ${mimeType}`);
+
     if (!ai) {
-        console.error(`${prefix} Google GenAI SDK not initialized during analyzeVideoWithGemini.`);
+        console.error(`${prefix} Google GenAI SDK not initialized during analyzeMediaWithGemini.`);
         throw new Error('Google GenAI SDK not initialized');
     }
 
     if (!fileUri) {
-        console.error(`${prefix} File URI is required but was not provided for analyzeVideoWithGemini.`);
+        console.error(`${prefix} File URI is required but was not provided for analyzeMediaWithGemini.`);
         throw new Error('File URI is required but was not provided');
     }
 
-    const prompt = `请分析这个运动视频中的体态和动作。请提供详细的分析报告，包括：
-
-1. **动作识别**: 识别视频中的运动类型和具体动作
-2. **体态评估**: 分析身体姿势、对齐和平衡
-3. **技术要点**: 指出动作的关键技术要素
-4. **问题识别**: 发现可能的体态问题或动作错误
-5. **改进建议**: 提供具体的改进建议和训练要点
-6. **安全提醒**: 指出需要注意的安全事项
-
-请用中文回答，并提供结构化的分析报告。`;
+    const prompt = generateAnalysisPrompt(mediaType, 1);
 
     try {
         const startTime = Date.now();
@@ -158,7 +267,7 @@ export async function analyzeVideoWithGemini(fileUri: string, mimeType: string =
 
         const duration = Date.now() - startTime;
         const analysisText = response.text;
-        console.info(`${prefix} Gemini analysis successful. Duration: ${duration}ms. Response received: ${analysisText ? 'Yes' : 'No (Empty)'}`);
+        console.info(`${prefix} Gemini ${mediaType} analysis successful. Duration: ${duration}ms. Response received: ${analysisText ? 'Yes' : 'No (Empty)'}`);
 
         if (!analysisText) {
             console.error(`${prefix} No analysis text received from Gemini. URI: ${fileUri}`);
@@ -167,9 +276,14 @@ export async function analyzeVideoWithGemini(fileUri: string, mimeType: string =
 
         return analysisText;
     } catch (error) {
-        console.error(`${prefix} Error analyzing video with Gemini (URI: ${fileUri}):`, error instanceof Error ? error.message : error, error);
+        console.error(`${prefix} Error analyzing ${mediaType} with Gemini (URI: ${fileUri}):`, error instanceof Error ? error.message : error, error);
         throw error;
     }
+}
+
+// 保持向后兼容性的视频分析函数
+export async function analyzeVideoWithGemini(fileUri: string, mimeType: string = 'video/mp4', jobId?: string, dbEventId?: string | null): Promise<string> {
+    return analyzeMediaWithGemini(fileUri, mimeType, 'video', jobId, dbEventId);
 }
 
 export async function performCompleteAnalysis(
@@ -204,7 +318,7 @@ export async function performCompleteAnalysis(
 
         // 3. 进行分析
         console.info(`${prefix} Step 3: Analyzing video... URI: ${uploadedFile.uri}`);
-        const analysisResult = await analyzeVideoWithGemini(uploadedFile.uri, mimeType, jobId, dbEventId);
+        const analysisResult = await analyzeMediaWithGemini(uploadedFile.uri, mimeType, 'video', jobId, dbEventId);
         console.info(`${prefix} Step 3 Success: Video analysis complete. URI: ${uploadedFile.uri}`);
 
         console.info(`${prefix} performCompleteAnalysis finished successfully.`);
@@ -406,7 +520,7 @@ export async function performAnalysisWithLocalFile(
 
         // 进行分析
         console.info(`${prefix} Starting Gemini content analysis... URI: ${uploadedFile.uri}`);
-        const analysisResultText = await analyzeVideoWithGemini(uploadedFile.uri, mimeType, jobId, dbEventId);
+        const analysisResultText = await analyzeMediaWithGemini(uploadedFile.uri, mimeType, 'video', jobId, dbEventId);
         console.info(`${prefix} Gemini content analysis successful. Result text received.`);
 
         // 完成分析
@@ -476,28 +590,8 @@ export async function analyzeImages(images: Array<{ url: string, filename: strin
         throw new Error('Maximum 3 images allowed for analysis');
     }
 
-    // 构建分析提示词
-    const basePrompt = `请分析这${images.length === 1 ? '张运动图片' : `${images.length}张运动图片`}中的体态和动作。请提供详细的分析报告，包括：
-
-1. **动作识别**: 识别图片中的运动类型和具体动作
-2. **体态评估**: 分析身体姿势、对齐和平衡
-3. **技术要点**: 指出动作的关键技术要素
-4. **问题识别**: 发现可能的体态问题或动作错误
-5. **改进建议**: 提供具体的改进建议和训练要点
-6. **安全提醒**: 指出需要注意的安全事项`;
-
-    let specificPrompt = '';
-    if (images.length === 1) {
-        specificPrompt = '\n\n请针对这张图片进行详细的单帧分析，重点关注当前姿态的准确性和改进空间。';
-    } else {
-        specificPrompt = `\n\n这是${images.length}张图片的对比分析，请：
-- 比较不同图片中的动作差异
-- 分析动作的进步或退步
-- 提供连续性的改进建议
-- 指出动作序列中的关键变化点`;
-    }
-
-    const fullPrompt = basePrompt + specificPrompt + '\n\n请用中文回答，并提供结构化的分析报告。';
+    // 使用统一的提示词生成函数
+    const fullPrompt = generateAnalysisPrompt('image', images.length);
 
     try {
         const startTime = Date.now();
