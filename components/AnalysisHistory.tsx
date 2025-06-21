@@ -2,15 +2,29 @@
 
 import React, { useState } from 'react';
 import { AnalysisReport } from './AnalysisReport';
+import { AdminPasswordModal } from './AdminPasswordModal';
 import { useAnalysisHistory, useJobRetry } from '../lib/hooks';
 
 export const AnalysisHistory: React.FC = () => {
     const [selectedReport, setSelectedReport] = useState<string | null>(null);
     const [showReportModal, setShowReportModal] = useState(false);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [showPasswordModal, setShowPasswordModal] = useState(true);
 
     // 使用自定义Hooks
     const { history, loading, error, refetch } = useAnalysisHistory(10);
     const { retryJob, isRetrying } = useJobRetry();
+
+    // 处理密码验证成功
+    const handlePasswordSuccess = () => {
+        setIsAuthenticated(true);
+        setShowPasswordModal(false);
+    };
+
+    // 处理密码弹窗关闭
+    const handlePasswordModalClose = () => {
+        setShowPasswordModal(false);
+    };
 
 
 
@@ -82,6 +96,33 @@ export const AnalysisHistory: React.FC = () => {
             alert(`重试失败: ${(err as Error).message}`);
         }
     };
+
+    // 如果未认证，显示密码验证弹窗
+    if (!isAuthenticated) {
+        return (
+            <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-900 to-slate-800 text-slate-100">
+                <div className="flex-grow flex items-center justify-center">
+                    <div className="text-center max-w-md mx-auto p-6">
+                        <i className="fas fa-lock text-6xl text-sky-400 mb-4"></i>
+                        <h3 className="text-xl font-semibold text-sky-300 mb-2">需要管理员权限</h3>
+                        <p className="text-slate-400 mb-6">访问历史记录需要管理员密码验证</p>
+                        <button
+                            onClick={() => setShowPasswordModal(true)}
+                            className="bg-sky-600 hover:bg-sky-700 text-white px-6 py-2 rounded-lg transition duration-200"
+                        >
+                            <i className="fas fa-key mr-2"></i>
+                            输入密码
+                        </button>
+                    </div>
+                </div>
+                <AdminPasswordModal
+                    isOpen={showPasswordModal}
+                    onClose={handlePasswordModalClose}
+                    onSuccess={handlePasswordSuccess}
+                />
+            </div>
+        );
+    }
 
     if (loading) {
         return (
