@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { AnalysisReport } from './AnalysisReport';
 import { AdminPasswordModal } from './AdminPasswordModal';
 import { useAnalysisHistory, useJobRetry } from '../lib/hooks';
@@ -82,6 +83,103 @@ export const AnalysisHistory: React.FC = () => {
             return fileName || '未知文件';
         } catch {
             return '未知文件';
+        }
+    };
+
+    // 渲染媒体预览
+    const renderMediaPreview = (event: {
+        analysis_type?: string;
+        image_urls?: string[];
+        image_count?: number;
+        r2_video_link?: string;
+        original_filename?: string;
+    }) => {
+        const isImageAnalysis = event.analysis_type === 'image';
+
+        if (isImageAnalysis && event.image_urls && event.image_urls.length > 0) {
+            // 图片分析预览
+            return (
+                <div className="flex items-center space-x-4">
+                    <div className="relative">
+                        <Image
+                            src={event.image_urls[0]}
+                            alt="图片预览"
+                            width={96}
+                            height={64}
+                            className="w-24 h-16 object-cover rounded-lg bg-slate-600"
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).src = '/placeholder-image.png';
+                            }}
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
+                            <i className="fas fa-image text-white text-sm"></i>
+                        </div>
+                        {event.image_count && event.image_count > 1 && (
+                            <div className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center">
+                                {event.image_count}
+                            </div>
+                        )}
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-slate-200">
+                            图片分析 ({event.image_count || 1}张)
+                        </p>
+                        <p className="text-xs text-slate-400">
+                            {event.original_filename || '未知文件'}
+                        </p>
+                    </div>
+                </div>
+            );
+        } else if (event.r2_video_link) {
+            // 视频分析预览
+            return (
+                <div className="flex items-center space-x-4">
+                    <div className="relative">
+                        <video
+                            src={event.r2_video_link}
+                            className="w-24 h-16 object-cover rounded-lg bg-slate-600"
+                            muted
+                            preload="metadata"
+                            onMouseEnter={(e) => {
+                                (e.target as HTMLVideoElement).currentTime = 1;
+                            }}
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
+                            <i className="fas fa-play text-white text-sm"></i>
+                        </div>
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-slate-200">
+                            {getVideoFileName(event.r2_video_link)}
+                        </p>
+                        <a
+                            href={event.r2_video_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-sky-400 hover:text-sky-300 transition duration-200"
+                        >
+                            查看原视频
+                        </a>
+                    </div>
+                </div>
+            );
+        } else {
+            // 无媒体文件的情况
+            return (
+                <div className="flex items-center space-x-4">
+                    <div className="w-24 h-16 bg-slate-600 rounded-lg flex items-center justify-center">
+                        <i className="fas fa-file text-slate-400 text-lg"></i>
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-slate-200">
+                            {event.original_filename || '未知文件'}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                            {event.analysis_type === 'image' ? '图片分析' : '视频分析'}
+                        </p>
+                    </div>
+                </div>
+            );
         }
     };
 
@@ -200,7 +298,7 @@ export const AnalysisHistory: React.FC = () => {
                                 <thead className="bg-slate-600/50">
                                     <tr>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
-                                            视频预览
+                                            媒体预览
                                         </th>
                                         <th className="px-6 py-3 text-left text-xs font-medium text-slate-300 uppercase tracking-wider">
                                             创建时间
@@ -219,35 +317,7 @@ export const AnalysisHistory: React.FC = () => {
                                         return (
                                             <tr key={event.id} className="hover:bg-slate-600/30 transition duration-200">
                                                 <td className="px-6 py-4">
-                                                    <div className="flex items-center space-x-4">
-                                                        <div className="relative">
-                                                            <video
-                                                                src={event.r2_video_link}
-                                                                className="w-24 h-16 object-cover rounded-lg bg-slate-600"
-                                                                muted
-                                                                preload="metadata"
-                                                                onMouseEnter={(e) => {
-                                                                    (e.target as HTMLVideoElement).currentTime = 1;
-                                                                }}
-                                                            />
-                                                            <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
-                                                                <i className="fas fa-play text-white text-sm"></i>
-                                                            </div>
-                                                        </div>
-                                                        <div>
-                                                            <p className="text-sm font-medium text-slate-200">
-                                                                {getVideoFileName(event.r2_video_link)}
-                                                            </p>
-                                                            <a
-                                                                href={event.r2_video_link}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="text-xs text-sky-400 hover:text-sky-300 transition duration-200"
-                                                            >
-                                                                查看原视频
-                                                            </a>
-                                                        </div>
-                                                    </div>
+                                                    {renderMediaPreview(event)}
                                                 </td>
                                                 <td className="px-6 py-4 text-sm text-slate-300">
                                                     {formatDate(event.created_at)}

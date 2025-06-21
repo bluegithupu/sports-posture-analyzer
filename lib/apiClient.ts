@@ -27,6 +27,12 @@ export interface AnalysisEvent {
     };
     status: 'pending' | 'processing' | 'completed' | 'failed';
     error_message?: string;
+    original_filename?: string;
+    content_type?: string;
+    status_text?: string;
+    analysis_type?: string;
+    image_urls?: string[];
+    image_count?: number;
 }
 
 export interface JobResult {
