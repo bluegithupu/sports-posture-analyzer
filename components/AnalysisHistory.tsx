@@ -6,6 +6,41 @@ import { AnalysisReport } from './AnalysisReport';
 import { AdminPasswordModal } from './AdminPasswordModal';
 import { useAnalysisHistory, useJobRetry } from '../lib/hooks';
 
+// 图片预览组件，带有错误处理
+const ImagePreviewWithFallback: React.FC<{
+    src: string;
+    alt: string;
+    width: number;
+    height: number;
+    className?: string;
+}> = ({ src, alt, width, height, className }) => {
+    const [imageError, setImageError] = useState(false);
+
+    if (imageError) {
+        // 图片加载失败时显示占位符
+        return (
+            <div className={`${className} flex items-center justify-center bg-slate-600`}>
+                <i className="fas fa-image text-slate-400 text-lg"></i>
+            </div>
+        );
+    }
+
+    return (
+        <Image
+            src={src}
+            alt={alt}
+            width={width}
+            height={height}
+            className={className}
+            onError={() => {
+                console.warn('图片加载失败:', src);
+                setImageError(true);
+            }}
+            unoptimized={true}
+        />
+    );
+};
+
 export const AnalysisHistory: React.FC = () => {
     const [selectedReport, setSelectedReport] = useState<string | null>(null);
     const [showReportModal, setShowReportModal] = useState(false);
@@ -101,15 +136,12 @@ export const AnalysisHistory: React.FC = () => {
             return (
                 <div className="flex items-center space-x-4">
                     <div className="relative">
-                        <Image
+                        <ImagePreviewWithFallback
                             src={event.image_urls[0]}
                             alt="图片预览"
                             width={96}
                             height={64}
                             className="w-24 h-16 object-cover rounded-lg bg-slate-600"
-                            onError={(e) => {
-                                (e.target as HTMLImageElement).src = '/placeholder-image.png';
-                            }}
                         />
                         <div className="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
                             <i className="fas fa-image text-white text-sm"></i>
