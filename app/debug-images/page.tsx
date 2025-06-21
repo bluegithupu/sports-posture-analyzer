@@ -6,7 +6,15 @@ import { useAnalysisHistory } from '@/lib/hooks';
 
 export default function DebugImagesPage() {
     const [testUrl, setTestUrl] = useState('');
-    const [imageRecords, setImageRecords] = useState<any[]>([]);
+    const [imageRecords, setImageRecords] = useState<Array<{
+        id: string;
+        analysis_type?: string;
+        image_urls?: string[];
+        image_count?: number;
+        created_at: string;
+        status: string;
+        original_filename?: string;
+    }>>([]);
     const { history, loading, error } = useAnalysisHistory(20);
 
     useEffect(() => {
@@ -125,10 +133,10 @@ export default function DebugImagesPage() {
                                         </div>
                                         
                                         <div className="p-4">
-                                            {record.image_urls.map((imageUrl: string, imgIndex: number) => (
+                                            {record.image_urls?.map((imageUrl: string, imgIndex: number) => (
                                                 <div key={imgIndex} className="mb-6 last:mb-0">
                                                     <h4 className="text-md font-medium text-slate-300 mb-3">
-                                                        图片 {imgIndex + 1} / {record.image_urls.length}
+                                                        图片 {imgIndex + 1} / {record.image_urls?.length || 0}
                                                     </h4>
                                                     <ImagePreviewDebug 
                                                         imageUrl={imageUrl}

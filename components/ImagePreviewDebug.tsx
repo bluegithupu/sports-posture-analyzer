@@ -43,8 +43,8 @@ export const ImagePreviewDebug: React.FC<ImagePreviewDebugProps> = ({
 
             // 测试图片是否可访问
             testImageAccess(imageUrl);
-        } catch (error) {
-            console.error('Invalid URL:', imageUrl, error);
+        } catch {
+            console.error('Invalid URL:', imageUrl);
             setImageStatus('error');
         }
     }, [imageUrl]);
@@ -59,7 +59,7 @@ export const ImagePreviewDebug: React.FC<ImagePreviewDebugProps> = ({
                 setImageStatus('error');
                 setImageInfo(prev => prev ? { ...prev, corsTest: `HTTP ${response.status}` } : null);
             }
-        } catch (error) {
+        } catch {
             setImageStatus('error');
             setImageInfo(prev => prev ? { ...prev, corsTest: 'CORS/Network Error' } : null);
         }
@@ -102,12 +102,14 @@ export const ImagePreviewDebug: React.FC<ImagePreviewDebugProps> = ({
                 <div>
                     <h5 className="text-sm font-medium text-slate-400 mb-2">普通 img 标签</h5>
                     <div className="relative w-32 h-24 bg-slate-700 rounded border">
-                        <img
+                        <Image
                             src={imageUrl}
                             alt="普通img预览"
-                            className="w-full h-full object-cover rounded"
+                            fill
+                            className="object-cover rounded"
                             onLoad={() => console.log('普通img加载成功')}
                             onError={() => console.log('普通img加载失败')}
+                            unoptimized={true}
                         />
                     </div>
                 </div>
