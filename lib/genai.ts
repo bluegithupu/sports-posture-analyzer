@@ -8,6 +8,7 @@ import path from 'path';
 import { updateAnalysisEventStatus, updateAnalysisEventGeminiLink, completeAnalysisEvent } from './supabaseClient';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY!;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
 if (!GEMINI_API_KEY) {
     console.warn("GEMINI_API_KEY is not set. AI analysis features will be disabled.");
@@ -148,7 +149,7 @@ export async function analyzeVideoWithGemini(fileUri: string, mimeType: string =
     try {
         const startTime = Date.now();
         const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: GEMINI_MODEL,
             contents: createUserContent([
                 createPartFromUri(fileUri, mimeType),
                 prompt
@@ -412,7 +413,7 @@ export async function performAnalysisWithLocalFile(
         const analysisReport = {
             text: analysisResultText,
             timestamp: new Date().toISOString(),
-            model_used: 'gemini-2.0-flash' // Ensure this is the correct model if it changes
+            model_used: GEMINI_MODEL // Use the configured model name
         };
         console.info(`${prefix} Analysis report prepared. Updating Supabase to COMPLETED.`);
 
@@ -539,7 +540,7 @@ export async function analyzeImages(images: Array<{ url: string, filename: strin
         contentParts.push({ text: fullPrompt });
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: GEMINI_MODEL,
             contents: [{ role: 'user', parts: contentParts }]
         });
 
@@ -590,7 +591,7 @@ export async function performImageAnalysis(
         const analysisReport = {
             text: analysisText, // 统一使用 text 字段
             timestamp: new Date().toISOString(), // 统一使用 timestamp 字段
-            model_used: 'gemini-2.0-flash', // 统一添加模型信息
+            model_used: GEMINI_MODEL, // 使用配置的模型名称
             analysis_type: 'image' as const,
             image_count: images.length,
             processing_duration_ms: analysisDuration,
