@@ -83,18 +83,18 @@ export const ImageAnalysisPage: React.FC = () => {
     }, [resetUpload]);
 
     return (
-        <div className="container mx-auto px-4 py-8">
-            <div className="bg-slate-800 shadow-2xl rounded-lg p-6 md:p-10">
-                <h2 className="text-3xl font-bold mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-cyan-300">
+        <div className="container mx-auto px-4 py-4 sm:py-6 lg:py-8 safe-padding">
+            <div className="bg-slate-800 shadow-2xl rounded-lg p-4 sm:p-6 lg:p-8 xl:p-10">
+                <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-6 sm:mb-8 text-center text-transparent bg-clip-text bg-gradient-to-r from-sky-400 to-cyan-300">
                     运动图片体态分析
                 </h2>
 
-                <div className="grid lg:grid-cols-2 gap-8">
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 sm:gap-8">
                     {/* 左侧：上传和预览 */}
-                    <div className="space-y-6">
+                    <div className="space-y-4 sm:space-y-6">
                         {/* 图片上传 */}
-                        <div className="p-6 bg-slate-700/50 rounded-lg shadow-lg">
-                            <h3 className="text-xl font-semibold mb-4 text-sky-300">1. 选择图片</h3>
+                        <div className="p-4 sm:p-6 bg-slate-700/50 rounded-lg shadow-lg">
+                            <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4 text-sky-300">1. 选择图片</h3>
                             <ImageUpload
                                 onImagesSelect={handleImagesSelect}
                                 currentImages={selectedImages}

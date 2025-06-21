@@ -143,7 +143,7 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     <div className="w-full space-y-4">
       {/* 文件选择区域 */}
       <div
-        className={`relative border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all duration-300 ${dragOver
+        className={`relative border-2 border-dashed rounded-lg p-4 sm:p-6 text-center cursor-pointer transition-all duration-300 touch-target ${dragOver
           ? 'border-sky-400 bg-sky-400/10'
           : canAddMore
             ? 'border-slate-600 hover:border-sky-400 hover:bg-slate-700/50'
@@ -164,44 +164,45 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
           disabled={!canAddMore || compressing}
         />
 
-        <div className="space-y-3">
-          <i className={`fas ${compressing ? 'fa-spinner fa-spin' : 'fa-images'} text-4xl ${canAddMore && !compressing ? 'text-sky-400' : 'text-slate-600'}`}></i>
+        <div className="space-y-2 sm:space-y-3">
+          <i className={`fas ${compressing ? 'fa-spinner fa-spin' : 'fa-images'} text-3xl sm:text-4xl ${canAddMore && !compressing ? 'text-sky-400' : 'text-slate-600'}`}></i>
 
           {compressing ? (
             <>
-              <h3 className="text-lg font-semibold text-slate-300">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-300">
                 正在压缩图片
               </h3>
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-slate-400 px-2">
                 {compressionStatus}
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs sm:text-sm text-slate-500 px-2">
                 请稍候，正在优化图片大小以提升上传速度...
               </p>
             </>
           ) : canAddMore ? (
             <>
-              <h3 className="text-lg font-semibold text-slate-300">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-300">
                 选择图片文件
               </h3>
-              <p className="text-sm text-slate-400">
-                点击选择或拖拽图片到此处
+              <p className="text-sm text-slate-400 px-2">
+                <span className="hidden sm:inline">点击选择或拖拽图片到此处</span>
+                <span className="sm:hidden">点击选择图片</span>
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs sm:text-sm text-slate-500 px-2">
                 支持 JPG、PNG、GIF 等格式，最多 {maxImages} 张图片
               </p>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs sm:text-sm text-slate-500">
                 已选择 {currentImages.length} / {maxImages} 张
               </p>
               {enableCompression && (
-                <p className="text-xs text-green-400">
+                <p className="text-xs sm:text-sm text-green-400 px-2">
                   ✨ 自动压缩已启用，大图片将自动优化
                 </p>
               )}
             </>
           ) : (
             <>
-              <h3 className="text-lg font-semibold text-slate-500">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-500">
                 已达到最大图片数量
               </h3>
               <p className="text-sm text-slate-500">
