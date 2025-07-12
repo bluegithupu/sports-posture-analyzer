@@ -257,7 +257,7 @@ export async function getAnalysisHistory(limit: number = 10) {
     try {
         const { data, error } = await supabase
             .from('analysis_events')
-            .select('id, created_at, r2_video_link, status, error_message, analysis_report, original_filename, content_type, status_text')
+            .select('id, created_at, r2_video_link, status, error_message, analysis_report, original_filename, content_type, status_text, analysis_type, image_urls, image_count')
             .order('created_at', { ascending: false })
             .limit(limit);
 
@@ -287,7 +287,7 @@ export async function getAnalysisEventById(eventId: string): Promise<{ data: Ana
     try {
         const { data, error } = await supabase
             .from('analysis_events')
-            .select('id, created_at, r2_video_link, status, error_message, analysis_report, gemini_file_link, original_filename, content_type, status_text')
+            .select('id, created_at, r2_video_link, status, error_message, analysis_report, gemini_file_link, original_filename, content_type, status_text, analysis_type, image_urls, image_count')
             .eq('id', eventId)
             .single();
 
