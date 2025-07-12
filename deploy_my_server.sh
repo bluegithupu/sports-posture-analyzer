@@ -4,7 +4,7 @@
 # 服务器信息
 USER="root"
 HOST="74.48.78.100"
-REMOTE_DIR="/root/code/deploy"
+REMOTE_DIR="/root/deploy"
 
 # 需要打包的文件/目录
 FILES=".next node_modules package.json .env.local"
@@ -12,15 +12,15 @@ FILES=".next node_modules package.json .env.local"
 # 压缩包名称
 TAR_FILE="deploy.tar.gz"
 
-# === 本地构建 ===
-echo "[1/5] 本地安装依赖..."
-npm install || { echo "npm install 失败"; exit 1; }
+# # === 本地构建 ===
+# echo "[1/5] 本地安装依赖..."
+# npm install || { echo "npm install 失败"; exit 1; }
 
-echo "[2/5] 本地构建..."
-npm run build || { echo "npm run build 失败"; exit 1; }
+# echo "[2/5] 本地构建..."
+# npm run build || { echo "npm run build 失败"; exit 1; }
 
-echo "[3/5] 打包文件..."
-tar -czvf $TAR_FILE $FILES || { echo "打包失败"; exit 1; }
+# echo "[3/5] 打包文件..."
+# tar -czvf $TAR_FILE $FILES || { echo "打包失败"; exit 1; }
 
 # === 上传到服务器 ===
 echo "[4/5] 上传到服务器..."
