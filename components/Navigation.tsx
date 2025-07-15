@@ -11,6 +11,7 @@ export const Navigation: React.FC = () => {
     const navItems = [
         { path: '/', label: '图片分析', icon: 'fas fa-image' },
         { path: '/video-analysis', label: '视频分析', icon: 'fas fa-video' },
+        { path: '/live-coach', label: '实时教练', icon: 'fas fa-user-friends' },
         { path: '/history', label: '历史记录', icon: 'fas fa-history' }
     ];
 

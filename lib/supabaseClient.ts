@@ -251,10 +251,13 @@ export async function completeAnalysisEvent(eventId: string, analysisReport: Rec
  */
 export async function getAnalysisHistory(limit: number = 10) {
     if (!supabase) {
+        console.warn("Supabase client not initialized in getAnalysisHistory");
         return { data: [], error: "Database not configured" };
     }
 
     try {
+        console.log(`Fetching analysis history from Supabase with limit: ${limit}`);
+        
         const { data, error } = await supabase
             .from('analysis_events')
             .select('id, created_at, r2_video_link, status, error_message, analysis_report, original_filename, content_type, status_text, analysis_type, image_urls, image_count')
@@ -262,14 +265,25 @@ export async function getAnalysisHistory(limit: number = 10) {
             .limit(limit);
 
         if (error) {
-            console.error("Error fetching analysis history:", error);
+            console.error("Supabase query error in getAnalysisHistory:", error);
             return { data: [], error: error.message };
         }
 
-        return { data };
+        console.log(`Successfully fetched ${data?.length || 0} analysis events`);
+        return { data: data || [] };
     } catch (err: unknown) {
         const error = err as Error;
-        console.error("Exception fetching analysis history:", error);
+        console.error("Exception in getAnalysisHistory:", error);
+        console.error("Error stack:", error.stack);
+        
+        // 检查是否是网络错误
+        if (error.message.includes('fetch failed')) {
+            return { 
+                data: [], 
+                error: `Network error: Unable to connect to database. ${error.message}` 
+            };
+        }
+        
         return { data: [], error: error.message };
     }
 }

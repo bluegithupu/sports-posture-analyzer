@@ -74,8 +74,16 @@ export interface SubmitImagesResponse {
 class ApiClient {
     private baseUrl: string;
 
-    constructor(baseUrl: string = '/api') {
-        this.baseUrl = baseUrl;
+    constructor(baseUrl?: string) {
+        // 在服务器端使用完整URL，在客户端使用相对路径
+        if (typeof window === 'undefined') {
+            // 服务器端
+            const host = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+            this.baseUrl = `${host}/api`;
+        } else {
+            // 客户端
+            this.baseUrl = baseUrl || '/api';
+        }
     }
 
     private async request<T>(
