@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createLiveSession, GeminiLiveSession } from '@/lib/geminiLive';
 import { sendMessageToClient } from '@/lib/sseManager';
+import { Modality, MediaResolution } from '@google/genai';
 
 // 存储活跃的会话
 const activeSessions = new Map<string, GeminiLiveSession>();
@@ -12,19 +13,19 @@ export async function POST(request: NextRequest) {
         switch (action) {
             case 'connect':
                 return await handleConnect(sessionId);
-            
+
             case 'disconnect':
                 return await handleDisconnect(sessionId);
-            
+
             case 'sendText':
                 return await handleSendText(sessionId, data.text);
-            
+
             case 'sendAudio':
                 return await handleSendAudio(sessionId, data.audioData);
-            
+
             case 'sendVideo':
                 return await handleSendVideo(sessionId, data.videoFrame);
-            
+
             default:
                 return NextResponse.json(
                     { error: 'Invalid action' },
@@ -46,9 +47,9 @@ async function handleConnect(sessionId: string): Promise<NextResponse> {
         if (activeSessions.has(sessionId)) {
             const existingSession = activeSessions.get(sessionId);
             if (existingSession?.isConnected()) {
-                return NextResponse.json({ 
-                    success: true, 
-                    message: 'Session already connected' 
+                return NextResponse.json({
+                    success: true,
+                    message: 'Session already connected'
                 });
             }
         }
@@ -61,7 +62,7 @@ async function handleConnect(sessionId: string): Promise<NextResponse> {
             },
             onmessage: (message) => {
                 console.log(`Session ${sessionId} received message:`, message);
-                
+
                 // 提取文本响应并发送到客户端
                 if (message.serverContent?.modelTurn?.parts) {
                     const part = message.serverContent.modelTurn.parts[0];
@@ -76,39 +77,37 @@ async function handleConnect(sessionId: string): Promise<NextResponse> {
             },
             onerror: (error) => {
                 console.error(`Session ${sessionId} error:`, error);
-                sendMessageToClient(sessionId, { 
-                    type: 'error', 
-                    message: error.message 
+                sendMessageToClient(sessionId, {
+                    type: 'error',
+                    message: error.message
                 });
             },
             onclose: (event) => {
                 console.log(`Session ${sessionId} closed:`, event.reason);
-                sendMessageToClient(sessionId, { 
-                    type: 'session_closed', 
-                    reason: event.reason 
+                sendMessageToClient(sessionId, {
+                    type: 'session_closed',
+                    reason: event.reason
                 });
                 activeSessions.delete(sessionId);
             }
         });
 
-        // 连接会话
+        // 连接会话 - 使用标准配置
         await session.connect({
-            speechConfig: {
-                languageCode: 'en-US',  // 使用英文，因为模型不支持中文
-                voiceConfig: {
-                    prebuiltVoiceConfig: {
-                        voiceName: 'Aoede'
-                    }
-                }
+            responseModalities: [Modality.TEXT],  // 只启用文本响应
+            mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
+            contextWindowCompression: {
+                triggerTokens: '25600',
+                slidingWindow: { targetTokens: '12800' },
             }
         });
 
         // 存储会话
         activeSessions.set(sessionId, session);
 
-        return NextResponse.json({ 
-            success: true, 
-            message: 'Session connected successfully' 
+        return NextResponse.json({
+            success: true,
+            message: 'Session connected successfully'
         });
     } catch (error) {
         console.error('Failed to connect session:', error);
@@ -127,9 +126,9 @@ async function handleDisconnect(sessionId: string): Promise<NextResponse> {
             activeSessions.delete(sessionId);
         }
 
-        return NextResponse.json({ 
-            success: true, 
-            message: 'Session disconnected' 
+        return NextResponse.json({
+            success: true,
+            message: 'Session disconnected'
         });
     } catch (error) {
         console.error('Failed to disconnect session:', error);
@@ -152,9 +151,9 @@ async function handleSendText(sessionId: string, text: string): Promise<NextResp
 
         await session.sendText(text);
 
-        return NextResponse.json({ 
-            success: true, 
-            message: 'Text sent successfully' 
+        return NextResponse.json({
+            success: true,
+            message: 'Text sent successfully'
         });
     } catch (error) {
         console.error('Failed to send text:', error);
@@ -179,16 +178,16 @@ async function handleSendAudio(sessionId: string, audioData: string): Promise<Ne
         const binaryString = atob(audioData);
         const arrayBuffer = new ArrayBuffer(binaryString.length);
         const uint8Array = new Uint8Array(arrayBuffer);
-        
+
         for (let i = 0; i < binaryString.length; i++) {
             uint8Array[i] = binaryString.charCodeAt(i);
         }
 
         await session.sendAudio(arrayBuffer);
 
-        return NextResponse.json({ 
-            success: true, 
-            message: 'Audio sent successfully' 
+        return NextResponse.json({
+            success: true,
+            message: 'Audio sent successfully'
         });
     } catch (error) {
         console.error('Failed to send audio:', error);
@@ -212,9 +211,9 @@ async function handleSendVideo(sessionId: string, videoFrame: ImageData): Promis
         // 这里videoFrame应该是ImageData格式
         await session.sendVideo(videoFrame);
 
-        return NextResponse.json({ 
-            success: true, 
-            message: 'Video frame sent successfully' 
+        return NextResponse.json({
+            success: true,
+            message: 'Video frame sent successfully'
         });
     } catch (error) {
         console.error('Failed to send video frame:', error);
@@ -239,9 +238,9 @@ export async function GET(request: NextRequest) {
     const session = activeSessions.get(sessionId);
     const isConnected = session ? session.isConnected() : false;
 
-    return NextResponse.json({ 
+    return NextResponse.json({
         connected: isConnected,
-        sessionId 
+        sessionId
     });
 }
 
@@ -257,9 +256,9 @@ export async function DELETE() {
         }
         activeSessions.clear();
 
-        return NextResponse.json({ 
-            success: true, 
-            message: 'All sessions cleared' 
+        return NextResponse.json({
+            success: true,
+            message: 'All sessions cleared'
         });
     } catch (error) {
         console.error('Failed to clear sessions:', error);

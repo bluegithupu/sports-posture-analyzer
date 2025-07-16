@@ -290,6 +290,30 @@ export function LiveCoachPage() {
         }
     }, [connectionState.connected, sessionId, addMessage]);
 
+    // 将 WebM 转换为 PCM 格式
+    const convertWebMToPCM = useCallback(async (webmData: ArrayBuffer): Promise<ArrayBuffer> => {
+        try {
+            const audioContext = new AudioContext({ sampleRate: 16000 });
+            const audioBuffer = await audioContext.decodeAudioData(webmData);
+
+            // 获取单声道音频数据
+            const channelData = audioBuffer.getChannelData(0);
+
+            // 转换为 16-bit PCM
+            const pcmData = new Int16Array(channelData.length);
+            for (let i = 0; i < channelData.length; i++) {
+                // 将浮点数转换为 16-bit 整数
+                pcmData[i] = Math.max(-32768, Math.min(32767, channelData[i] * 32767));
+            }
+
+            await audioContext.close();
+            return pcmData.buffer;
+        } catch (error) {
+            console.error('Error converting WebM to PCM:', error);
+            throw error;
+        }
+    }, []);
+
     // 开始录音
     const startRecording = useCallback(async () => {
         if (!mediaState.audio || !connectionState.connected) return;
@@ -311,11 +335,18 @@ export function LiveCoachPage() {
                 if (audioChunks.length > 0) {
                     const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     const arrayBuffer = await audioBlob.arrayBuffer();
-                    const base64Audio = btoa(
-                        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-                    );
+
+                    console.log('Original WebM audio length:', arrayBuffer.byteLength);
 
                     try {
+                        // 在前端转换为 PCM 格式
+                        const pcmData = await convertWebMToPCM(arrayBuffer);
+                        console.log('Converted to PCM, length:', pcmData.byteLength);
+
+                        const base64Audio = btoa(
+                            new Uint8Array(pcmData).reduce((data, byte) => data + String.fromCharCode(byte), '')
+                        );
+
                         const response = await fetch('/api/live-session', {
                             method: 'POST',
                             headers: {
@@ -344,7 +375,7 @@ export function LiveCoachPage() {
         } catch (error) {
             console.error('Failed to start recording:', error);
         }
-    }, [mediaState.audio, connectionState.connected, sessionId]);
+    }, [mediaState.audio, connectionState.connected, sessionId, convertWebMToPCM]);
 
     // 停止录音
     const stopRecording = useCallback(() => {

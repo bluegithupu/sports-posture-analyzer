@@ -4,7 +4,7 @@ import { Page } from '@playwright/test';
  * 模拟媒体设备的辅助函数
  */
 export class MediaMock {
-  constructor(private page: Page) {}
+  constructor(private page: Page) { }
 
   /**
    * 设置媒体设备模拟
@@ -12,7 +12,7 @@ export class MediaMock {
   async setupMediaDevices() {
     await this.page.addInitScript(() => {
       // 模拟 getUserMedia
-      const mockGetUserMedia = async (constraints: MediaStreamConstraints) => {
+      const mockGetUserMedia = async (_constraints: MediaStreamConstraints) => {
         // 创建模拟的 MediaStream
         const mockStream = {
           id: 'mock-stream-id',
@@ -25,9 +25,9 @@ export class MediaMock {
               enabled: true,
               muted: false,
               readyState: 'live',
-              stop: () => {},
-              addEventListener: () => {},
-              removeEventListener: () => {},
+              stop: () => { },
+              addEventListener: () => { },
+              removeEventListener: () => { },
               dispatchEvent: () => true,
             },
             {
@@ -37,9 +37,9 @@ export class MediaMock {
               enabled: true,
               muted: false,
               readyState: 'live',
-              stop: () => {},
-              addEventListener: () => {},
-              removeEventListener: () => {},
+              stop: () => { },
+              addEventListener: () => { },
+              removeEventListener: () => { },
               dispatchEvent: () => true,
             }
           ],
@@ -51,9 +51,9 @@ export class MediaMock {
               enabled: true,
               muted: false,
               readyState: 'live',
-              stop: () => {},
-              addEventListener: () => {},
-              removeEventListener: () => {},
+              stop: () => { },
+              addEventListener: () => { },
+              removeEventListener: () => { },
               dispatchEvent: () => true,
             }
           ],
@@ -65,18 +65,18 @@ export class MediaMock {
               enabled: true,
               muted: false,
               readyState: 'live',
-              stop: () => {},
-              addEventListener: () => {},
-              removeEventListener: () => {},
+              stop: () => { },
+              addEventListener: () => { },
+              removeEventListener: () => { },
               dispatchEvent: () => true,
             }
           ],
-          addEventListener: () => {},
-          removeEventListener: () => {},
+          addEventListener: () => { },
+          removeEventListener: () => { },
           dispatchEvent: () => true,
         };
 
-        return mockStream as MediaStream;
+        return mockStream as unknown as MediaStream;
       };
 
       // 替换 navigator.mediaDevices.getUserMedia
@@ -109,11 +109,11 @@ export class MediaMock {
         onstop: ((event: any) => void) | null = null;
         onerror: ((event: any) => void) | null = null;
 
-        constructor(stream: MediaStream, options?: any) {
+        constructor(_stream: MediaStream, _options?: any) {
           this.state = 'inactive';
         }
 
-        start(timeslice?: number) {
+        start(_timeslice?: number) {
           this.state = 'recording';
           // 模拟数据可用事件
           setTimeout(() => {
@@ -140,7 +140,7 @@ export class MediaMock {
           this.state = 'recording';
         }
 
-        static isTypeSupported(type: string) {
+        static isTypeSupported(_type: string) {
           return true;
         }
       };
@@ -173,7 +173,7 @@ export class MediaMock {
       );
 
       Object.defineProperty(HTMLVideoElement.prototype, 'srcObject', {
-        set: function(stream) {
+        set: function (stream) {
           // 模拟视频加载
           this.videoWidth = 640;
           this.videoHeight = 480;
@@ -191,7 +191,7 @@ export class MediaMock {
             originalSrcObjectDescriptor.set.call(this, stream);
           }
         },
-        get: function() {
+        get: function () {
           if (originalSrcObjectDescriptor?.get) {
             return originalSrcObjectDescriptor.get.call(this);
           }

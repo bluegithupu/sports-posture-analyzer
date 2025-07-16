@@ -7,7 +7,7 @@ import {
 } from '@google/genai';
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_LIVE_MODEL = 'gemini-live-2.5-flash-preview';
+const GEMINI_LIVE_MODEL = 'models/gemini-live-2.5-flash-preview';
 
 if (!GEMINI_API_KEY) {
     console.warn("GEMINI_API_KEY is not set. Live coach features will be disabled.");
@@ -62,8 +62,13 @@ export class GeminiLiveSession {
         this.connectionConfig = config;
 
         const defaultConfig = {
-            responseModalities: [Modality.TEXT],  // 先只使用文本模式
-            systemInstruction: "你是一位专业的运动姿态与体态分析大师。请用中文与用户交流，分析用户的运动动作并提供专业指导。请保持友好、专业的语调。"
+            responseModalities: [Modality.TEXT],  // 只返回文本响应
+            mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
+            contextWindowCompression: {
+                triggerTokens: '25600',
+                slidingWindow: { targetTokens: '12800' },
+            },
+            systemInstruction: "你是一位专业的运动姿态与体态分析大师。请用中文与用户交流，分析用户的运动动作并提供专业指导。请保持友好、专业的语调。当用户通过语音与你交流时，请直接用文字回复。"
         };
 
         const finalConfig = { ...defaultConfig, ...config };
@@ -178,24 +183,44 @@ Now let's begin our fitness coaching session. Please introduce yourself in Chine
         this.isProcessing = true;
 
         try {
+            console.log('Processing message:', JSON.stringify(message, null, 2));
+
             if (message.serverContent?.modelTurn?.parts) {
                 const part = message.serverContent.modelTurn.parts[0];
 
-                if (part?.inlineData) {
-                    // 处理音频数据
-                    this.audioParts.push(part.inlineData.data ?? '');
-
-                    if (message.serverContent.turnComplete) {
-                        // 完整音频接收完毕，可以播放
-                        this.playAudioResponse();
-                        this.audioParts = []; // 清空音频缓存
-                    }
+                // 处理文件数据（参考官方示例）
+                if (part?.fileData) {
+                    console.log(`File: ${part.fileData.fileUri}`);
                 }
 
+                // 处理文本数据
                 if (part?.text) {
                     console.log('Coach response:', part.text);
                     // 文本响应会在 API 路由中通过 SSE 发送到客户端
                 }
+
+                // 处理音频数据
+                if (part?.inlineData) {
+                    console.log('Received audio data, length:', part.inlineData.data?.length || 0);
+                    this.audioParts.push(part.inlineData.data ?? '');
+
+                    if (message.serverContent.turnComplete) {
+                        // 完整音频接收完毕，可以播放
+                        console.log('Audio turn complete, playing response');
+                        this.playAudioResponse();
+                        this.audioParts = []; // 清空音频缓存
+                    }
+                }
+            }
+
+            // 检查其他可能的消息类型
+            if (message.serverContent?.interrupted) {
+                console.log('Message was interrupted');
+            }
+
+            // 检查设置完成状态
+            if (message.setupComplete) {
+                console.log('Setup complete');
             }
         } catch (error) {
             console.error('Error processing message:', error);
@@ -249,8 +274,9 @@ Now let's begin our fitness coaching session. Please introduce yourself in Chine
         try {
             console.log('Sending text to Gemini Live session:', text);
 
-            this.session.sendRealtimeInput({
-                text: text
+            // 使用官方示例的 sendClientContent 方法
+            this.session.sendClientContent({
+                turns: [text]
             });
 
         } catch (error) {
@@ -259,25 +285,30 @@ Now let's begin our fitness coaching session. Please introduce yourself in Chine
         }
     }
 
-    async sendAudio(audioData: ArrayBuffer): Promise<void> {
+    async sendAudio(pcmData: ArrayBuffer): Promise<void> {
         if (!this.session) {
             throw new Error('Session not connected');
         }
 
         try {
-            console.log('Sending audio to Gemini Live session, length:', audioData.byteLength);
+            console.log('Sending PCM audio to Gemini Live session, length:', pcmData.byteLength);
 
             // 转换音频数据为base64
             const base64Audio = btoa(
-                new Uint8Array(audioData).reduce((data, byte) => data + String.fromCharCode(byte), '')
+                new Uint8Array(pcmData).reduce((data, byte) => data + String.fromCharCode(byte), '')
             );
 
+            console.log('Base64 audio length:', base64Audio.length);
+
+            // 使用 sendRealtimeInput 发送音频数据
             this.session.sendRealtimeInput({
                 audio: {
                     data: base64Audio,
                     mimeType: 'audio/pcm;rate=16000'
                 }
             });
+
+            console.log('Audio sent successfully, expecting text response');
 
         } catch (error) {
             console.error('Error sending audio:', error);
