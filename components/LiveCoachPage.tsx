@@ -39,6 +39,12 @@ export function LiveCoachPage() {
         timestamp: Date;
     }>>([]);
 
+    // 新增状态用于打字机效果
+    const [currentCoachMessage, setCurrentCoachMessage] = useState('');
+    const [isTyping, setIsTyping] = useState(false);
+    const [typingQueue, setTypingQueue] = useState<string[]>([]);
+    const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
     const videoRef = useRef<HTMLVideoElement>(null);
     const audioRecorderRef = useRef<MediaRecorder | null>(null);
     const videoIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -105,14 +111,71 @@ export function LiveCoachPage() {
         }
     }, []);
 
+    // 打字机效果函数
+    const typeMessage = useCallback((message: string) => {
+        setIsTyping(true);
+        setCurrentCoachMessage('');
+
+        let index = 0;
+        const typeChar = () => {
+            if (index < message.length) {
+                setCurrentCoachMessage(message.substring(0, index + 1));
+                index++;
+                typingTimeoutRef.current = setTimeout(typeChar, 50); // 每50ms显示一个字符
+            } else {
+                setIsTyping(false);
+                // 打字完成后，处理队列中的下一条消息
+                setTypingQueue(prev => {
+                    const newQueue = [...prev];
+                    newQueue.shift(); // 移除已处理的消息
+                    if (newQueue.length > 0) {
+                        // 如果还有消息，继续打字
+                        setTimeout(() => typeMessage(newQueue[0]), 500);
+                    }
+                    return newQueue;
+                });
+            }
+        };
+
+        typeChar();
+    }, []);
+
+    // 添加教练消息到打字队列
+    const addCoachMessage = useCallback((content: string) => {
+        setTypingQueue(prev => {
+            const newQueue = [...prev, content];
+            return newQueue;
+        });
+
+        // 使用 setTimeout 来检查是否需要开始打字
+        setTimeout(() => {
+            setTypingQueue(currentQueue => {
+                setIsTyping(currentIsTyping => {
+                    if (!currentIsTyping && currentQueue.length > 0) {
+                        typeMessage(currentQueue[0]);
+                        return true;
+                    }
+                    return currentIsTyping;
+                });
+                return currentQueue;
+            });
+        }, 50);
+    }, [typeMessage]);
+
     // 添加对话消息
     const addMessage = useCallback((type: 'user' | 'coach', content: string) => {
-        setConversation(prev => [...prev, {
-            type,
-            content,
-            timestamp: new Date()
-        }]);
-    }, []);
+        if (type === 'coach') {
+            // 教练消息使用打字机效果
+            addCoachMessage(content);
+        } else {
+            // 用户消息直接添加到对话记录
+            setConversation(prev => [...prev, {
+                type,
+                content,
+                timestamp: new Date()
+            }]);
+        }
+    }, [addCoachMessage]);
 
     // 连接到实时会话
     const connectToSession = useCallback(async () => {
@@ -456,6 +519,9 @@ export function LiveCoachPage() {
             if (eventSourceRef.current) {
                 eventSourceRef.current.close();
             }
+            if (typingTimeoutRef.current) {
+                clearTimeout(typingTimeoutRef.current);
+            }
             // 不在清理函数中调用 disconnectFromSession，避免依赖问题
         };
     }, []);
@@ -575,28 +641,38 @@ export function LiveCoachPage() {
                             <h2 className="text-xl font-semibold mb-4">实时对话</h2>
 
                             <div className="h-96 overflow-y-auto border rounded-lg p-4 mb-4 bg-gray-50">
-                                {conversation.length === 0 ? (
-                                    <div className="text-center text-gray-500 py-8">
-                                        <div className="text-4xl mb-4">🏃‍♀️</div>
-                                        <p>开始训练后，AI教练将在这里与你对话</p>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-4">
-                                        {conversation.map((message, index) => (
-                                            <div
-                                                key={index}
-                                                className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'
-                                                    }`}
-                                            >
-                                                <div
-                                                    className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.type === 'user'
-                                                        ? 'bg-blue-600 text-white'
-                                                        : 'bg-white border border-gray-200 text-gray-800'
-                                                        }`}
-                                                >
-                                                    <div className="text-sm font-medium mb-1">
-                                                        {message.type === 'user' ? '你' : 'AI教练'}
+                                {/* AI教练的集中对话框 */}
+                                {(currentCoachMessage || typingQueue.length > 0) && (
+                                    <div className="mb-6">
+                                        <div className="bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-lg p-4 shadow-lg">
+                                            <div className="flex items-center mb-2">
+                                                <div className="w-8 h-8 bg-white bg-opacity-20 rounded-full flex items-center justify-center mr-3">
+                                                    <span className="text-sm font-bold">AI</span>
+                                                </div>
+                                                <span className="font-semibold">专业运动姿态与体态分析大师</span>
+                                                {isTyping && (
+                                                    <div className="ml-2 flex space-x-1">
+                                                        <div className="w-2 h-2 bg-white rounded-full animate-bounce"></div>
+                                                        <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                                                        <div className="w-2 h-2 bg-white rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                                                     </div>
+                                                )}
+                                            </div>
+                                            <div className="text-white leading-relaxed">
+                                                {currentCoachMessage}
+                                                {isTyping && <span className="animate-pulse">|</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* 用户消息历史 */}
+                                {conversation.filter(msg => msg.type === 'user').length > 0 && (
+                                    <div className="space-y-3">
+                                        <div className="text-sm font-medium text-gray-600 mb-2">你的消息：</div>
+                                        {conversation.filter(msg => msg.type === 'user').map((message, index) => (
+                                            <div key={index} className="flex justify-end">
+                                                <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-blue-600 text-white">
                                                     <div>{message.content}</div>
                                                     <div className="text-xs opacity-70 mt-1">
                                                         {message.timestamp.toLocaleTimeString()}
@@ -604,6 +680,14 @@ export function LiveCoachPage() {
                                                 </div>
                                             </div>
                                         ))}
+                                    </div>
+                                )}
+
+                                {/* 空状态 */}
+                                {conversation.length === 0 && !currentCoachMessage && typingQueue.length === 0 && (
+                                    <div className="text-center text-gray-500 py-8">
+                                        <div className="text-4xl mb-4">🏃‍♀️</div>
+                                        <p>开始训练后，AI教练将在这里与你对话</p>
                                     </div>
                                 )}
                             </div>
@@ -634,6 +718,8 @@ export function LiveCoachPage() {
                                     </div>
                                 </div>
                             )}
+
+
                         </div>
                     </div>
 
