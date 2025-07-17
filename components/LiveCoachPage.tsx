@@ -26,6 +26,7 @@ export function LiveCoachPage() {
     // 调试：监听连接状态变化
     useEffect(() => {
         console.log('Connection state changed:', connectionState);
+        connectionStateRef.current = connectionState;
     }, [connectionState]);
     const [mediaState, setMediaState] = useState<MediaStreamState>({
         video: null,
@@ -50,6 +51,7 @@ export function LiveCoachPage() {
     const videoIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
+    const connectionStateRef = useRef(connectionState);
 
     // 获取媒体权限
     const requestMediaAccess = useCallback(async () => {
@@ -451,22 +453,60 @@ export function LiveCoachPage() {
 
     // 发送视频帧
     const sendVideoFrame = useCallback(async () => {
-        if (!videoRef.current || !canvasRef.current || !connectionState.connected) return;
+        console.log('sendVideoFrame called, checking conditions...');
+        console.log('videoRef.current:', !!videoRef.current);
+        console.log('canvasRef.current:', !!canvasRef.current);
+
+        if (!videoRef.current || !canvasRef.current) {
+            console.log('sendVideoFrame: Missing required elements');
+            return;
+        }
+
+        // 使用ref获取最新的连接状态
+        const currentConnectionState = connectionStateRef.current.connected;
+        console.log('connectionState.connected:', currentConnectionState);
+
+        if (!currentConnectionState) {
+            console.log('sendVideoFrame: Not connected');
+            return;
+        }
 
         try {
             const video = videoRef.current;
             const canvas = canvasRef.current;
             const ctx = canvas.getContext('2d');
 
-            if (!ctx) return;
+            console.log('Video element properties:', {
+                videoWidth: video.videoWidth,
+                videoHeight: video.videoHeight,
+                readyState: video.readyState,
+                paused: video.paused
+            });
 
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0);
+            if (!ctx) {
+                console.log('Failed to get canvas context');
+                return;
+            }
 
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            if (video.videoWidth === 0 || video.videoHeight === 0) {
+                console.log('Video dimensions are 0, skipping frame');
+                return;
+            }
 
-            // 简化的视频帧发送（实际实现中可能需要更高效的方式）
+            // 设置合适的分辨率以减少数据量
+            const targetWidth = 320;
+            const targetHeight = 240;
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+
+            // 绘制视频帧到canvas，进行缩放
+            ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+
+            // 将canvas转换为base64 JPEG格式
+            const base64Image = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+
+            console.log('Sending video frame, base64 length:', base64Image.length);
+
             const response = await fetch('/api/live-session', {
                 method: 'POST',
                 headers: {
@@ -475,18 +515,25 @@ export function LiveCoachPage() {
                 body: JSON.stringify({
                     action: 'sendVideo',
                     sessionId: sessionId,
-                    data: { videoFrame: imageData }
+                    data: {
+                        videoFrame: base64Image,
+                        width: targetWidth,
+                        height: targetHeight,
+                        mimeType: 'image/jpeg'
+                    }
                 }),
             });
 
             const result = await response.json();
             if (!result.success) {
                 console.warn('Failed to send video frame:', result.error);
+            } else {
+                console.log('Video frame sent successfully');
             }
         } catch (error) {
             console.error('Failed to send video frame:', error);
         }
-    }, [connectionState.connected, sessionId]);
+    }, [sessionId]);
 
     // 切换静音状态
     const toggleMute = useCallback(() => {

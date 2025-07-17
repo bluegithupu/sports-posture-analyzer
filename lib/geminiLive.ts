@@ -68,7 +68,7 @@ export class GeminiLiveSession {
                 triggerTokens: '25600',
                 slidingWindow: { targetTokens: '12800' },
             },
-            systemInstruction: "你是一位专业的运动姿态与体态分析大师。请用中文与用户交流，分析用户的运动动作并提供专业指导。请保持友好、专业的语调。当用户通过语音与你交流时，请直接用文字回复。"
+            systemInstruction: "你是一位专业的运动姿态与体态分析大师。你将接收用户的实时视频画面和语音输入，请分析用户的运动动作并提供专业指导。当你看到视频画面时，请仔细观察用户的姿态、动作是否标准，并给出具体的改进建议。请用中文与用户交流，保持友好、专业的语调。"
         };
 
         const finalConfig = { ...defaultConfig, ...config };
@@ -154,22 +154,29 @@ export class GeminiLiveSession {
 - Use encouraging and professional language
 
 **Core Responsibilities**:
-1. **Real-time Posture Guidance**: Observe user's exercise videos and provide immediate posture corrections
-2. **Movement Demonstration**: Explain correct movement techniques and key points in detail
-3. **Safety Reminders**: Identify dangerous movements and promptly remind users to stop or adjust
-4. **Encouragement and Support**: Provide positive encouragement to maintain exercise motivation
-5. **Personalized Advice**: Offer personalized training suggestions based on user performance
+1. **Real-time Video Analysis**: You will receive real-time video frames from the user's camera. Carefully analyze their posture, movement form, and technique
+2. **Immediate Feedback**: Provide instant corrections when you see improper form or dangerous movements
+3. **Movement Demonstration**: Explain correct movement techniques and key points in detail
+4. **Safety Reminders**: Identify dangerous movements and promptly remind users to stop or adjust
+5. **Encouragement and Support**: Provide positive encouragement to maintain exercise motivation
+6. **Personalized Advice**: Offer personalized training suggestions based on what you observe in the video
+
+**Video Analysis Guidelines**:
+- When you receive video frames, analyze the user's posture, alignment, and movement quality
+- Look for common form mistakes like knee valgus, forward head posture, rounded shoulders, etc.
+- Provide specific corrections like "保持膝盖与脚尖方向一致" or "收紧核心，保持脊柱中立"
+- Comment on what the user is doing well to maintain motivation
 
 **Communication Principles**:
 - Keep responses brief and effective (1-2 sentences per response)
 - Prioritize safety concerns
 - Use encouraging language
-- Provide specific, actionable advice
+- Provide specific, actionable advice based on what you see in the video
 - Appropriately ask about user's feelings and needs
 - Always respond in Chinese to match user preference
-- If user speaks Chinese, respond in Chinese with professional fitness guidance
+- When analyzing video, be specific about what you observe
 
-Now let's begin our fitness coaching session. Please introduce yourself in Chinese and ask the user what exercise they would like to do today.`;
+Now let's begin our fitness coaching session. You will receive real-time video from the user's camera. Please introduce yourself in Chinese and ask the user what exercise they would like to do today.`;
 
         if (this.session) {
             this.session.sendRealtimeInput({
@@ -316,37 +323,50 @@ Now let's begin our fitness coaching session. Please introduce yourself in Chine
         }
     }
 
-    async sendVideo(videoFrame: ImageData): Promise<void> {
+    async sendVideo(videoData: ImageData | string, mimeType?: string): Promise<void> {
         if (!this.session) {
             throw new Error('Session not connected');
         }
 
-        // 检查是否在浏览器环境中
-        if (typeof window === 'undefined' || typeof document === 'undefined') {
-            console.warn('sendVideo called in server environment, skipping');
-            return;
-        }
-
         try {
-            console.log('Sending video frame to Gemini Live session, dimensions:', videoFrame.width, 'x', videoFrame.height);
+            let base64Image: string;
 
-            // 将ImageData转换为base64图像
-            const canvas = document.createElement('canvas');
-            canvas.width = videoFrame.width;
-            canvas.height = videoFrame.height;
-            const ctx = canvas.getContext('2d');
+            if (typeof videoData === 'string') {
+                // 如果直接传入base64字符串
+                base64Image = videoData;
+                console.log('Sending video frame to Gemini Live session, base64 length:', base64Image.length);
+            } else {
+                // 如果传入ImageData对象（浏览器环境）
+                if (typeof window === 'undefined' || typeof document === 'undefined') {
+                    console.warn('sendVideo called with ImageData in server environment, skipping');
+                    return;
+                }
 
-            if (ctx) {
-                ctx.putImageData(videoFrame, 0, 0);
-                const base64Image = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+                console.log('Sending video frame to Gemini Live session, dimensions:', videoData.width, 'x', videoData.height);
 
-                this.session.sendRealtimeInput({
-                    media: {
-                        data: base64Image,
-                        mimeType: 'image/jpeg'
-                    }
-                });
+                // 将ImageData转换为base64图像
+                const canvas = document.createElement('canvas');
+                canvas.width = videoData.width;
+                canvas.height = videoData.height;
+                const ctx = canvas.getContext('2d');
+
+                if (!ctx) {
+                    throw new Error('Failed to get canvas context');
+                }
+
+                ctx.putImageData(videoData, 0, 0);
+                base64Image = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
             }
+
+            // 发送到Gemini Live
+            this.session.sendRealtimeInput({
+                media: {
+                    data: base64Image,
+                    mimeType: mimeType || 'image/jpeg'
+                }
+            });
+
+            console.log('Video frame sent to Gemini Live successfully');
 
         } catch (error) {
             console.error('Error sending video frame:', error);

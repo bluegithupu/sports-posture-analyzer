@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
                 return await handleSendAudio(sessionId, data.audioData);
 
             case 'sendVideo':
-                return await handleSendVideo(sessionId, data.videoFrame);
+                return await handleSendVideo(sessionId, data);
 
             default:
                 return NextResponse.json(
@@ -198,7 +198,14 @@ async function handleSendAudio(sessionId: string, audioData: string): Promise<Ne
     }
 }
 
-async function handleSendVideo(sessionId: string, videoFrame: ImageData): Promise<NextResponse> {
+interface VideoData {
+    videoFrame: string;
+    width: number;
+    height: number;
+    mimeType?: string;
+}
+
+async function handleSendVideo(sessionId: string, videoData: VideoData): Promise<NextResponse> {
     try {
         const session = activeSessions.get(sessionId);
         if (!session || !session.isConnected()) {
@@ -208,8 +215,20 @@ async function handleSendVideo(sessionId: string, videoFrame: ImageData): Promis
             );
         }
 
-        // 这里videoFrame应该是ImageData格式
-        await session.sendVideo(videoFrame);
+        // 从前端接收的视频数据格式：{ videoFrame: base64String, width: number, height: number, mimeType: string }
+        const { videoFrame, width, height, mimeType } = videoData;
+
+        if (!videoFrame || !width || !height) {
+            return NextResponse.json(
+                { error: 'Invalid video data format' },
+                { status: 400 }
+            );
+        }
+
+        console.log(`Received video frame: ${width}x${height}, base64 length: ${videoFrame.length}`);
+
+        // 发送视频帧到Gemini Live
+        await session.sendVideo(videoFrame, mimeType || 'image/jpeg');
 
         return NextResponse.json({
             success: true,
