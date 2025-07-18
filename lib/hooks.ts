@@ -157,26 +157,11 @@ export function useVideoAnalysis() {
                 throw new Error('视频文件过大，最大支持5GB');
             }
 
-            // 0. 运行上传诊断
-            setUploadMessage('正在诊断上传环境...');
-            onProgress?.('正在诊断上传环境...');
-
-            try {
-                const { UploadDiagnosticTool } = await import('../utils/uploadDiagnostics');
-                const diagnostics = await UploadDiagnosticTool.runDiagnostics(file);
-
-                // 检查是否有高风险问题
-                const highRiskIssues = diagnostics.issues.filter(issue => issue.severity === 'high');
-                if (highRiskIssues.length > 0) {
-                    console.warn('⚠️ 检测到上传风险:', highRiskIssues);
-                }
-            } catch (diagError) {
-                console.warn('诊断失败，继续上传:', diagError);
-            }
-
-            // 1. 获取上传URL
+            // 0. 准备上传
             setUploadMessage('正在准备上传...');
             onProgress?.('正在准备上传...');
+
+            // 1. 获取上传URL
 
             const uploadUrlResponse = await apiClient.generateUploadUrl(file.name, file.type);
             if (!uploadUrlResponse.success || !uploadUrlResponse.data) {
@@ -348,7 +333,7 @@ export function useImageAnalysis() {
 
             // 上传所有图片并获取URL
             const imageUrls: string[] = [];
-            const imageInfo: Array<{url: string, filename: string, contentType: string}> = [];
+            const imageInfo: Array<{ url: string, filename: string, contentType: string }> = [];
 
             for (let i = 0; i < images.length; i++) {
                 const image = images[i];
