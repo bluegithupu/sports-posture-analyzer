@@ -7,12 +7,12 @@
 ### 原架构
 - **前端**: React 19 + TypeScript + Vite + React Router DOM + Tailwind CSS
 - **后端**: Node.js + Express.js + Multer文件上传
-- **技术栈**: Supabase数据库、Cloudflare R2文件存储、Google GenAI分析服务
+- **技术栈**: Supabase数据库、Cloudflare R2文件存储、LiteLLM 聚合的 AI 分析服务
 
 ### 新架构
 - **统一项目**: Next.js 15 + React 19 + TypeScript + Tailwind CSS
 - **API路由**: Next.js App Router API Routes
-- **技术栈**: 保持原有的Supabase、Cloudflare R2、Google GenAI
+- **技术栈**: 保持原有的Supabase、Cloudflare R2，并以 LiteLLM 统一对接 AI 能力
 
 ## 已完成的工作
 
@@ -26,7 +26,7 @@
 - [x] 创建 Next.js 项目 (`nextjs-sports-analyzer`)
 - [x] 配置基本项目结构 (`components/`, `lib/`)
 - [x] 依赖合并与安装
-  - [x] `@google/genai`, `@supabase/supabase-js`, `@aws-sdk/client-s3`
+  - [x] `@supabase/supabase-js`, `@aws-sdk/client-s3`
   - [x] `react-markdown`, `uuid`, `@types/uuid`
 - [x] TypeScript 和 ESLint 配置
 - [x] Tailwind CSS 配置
@@ -34,7 +34,7 @@
 - [x] 初始化客户端库
   - [x] `lib/supabaseClient.ts` - Supabase客户端和数据库操作
   - [x] `lib/r2Client.ts` - Cloudflare R2客户端和文件操作
-  - [x] `lib/genai.ts` - Google GenAI客户端和分析功能
+  - [x] `lib/genai.ts` - LiteLLM 驱动的 AI 客户端与分析功能
   - [x] `lib/utils.ts` - 通用工具函数
 
 ### ✅ 阶段 2: 前端组件和页面迁移
@@ -64,7 +64,7 @@
 - [x] Cloudflare R2 交互迁移
   - [x] 预签名 URL 生成
   - [x] 文件上传支持
-- [x] Google GenAI 交互迁移
+- [x] LiteLLM 交互迁移
   - [x] 视频分析逻辑
   - [x] 文件处理和上传
 - [x] 文件上传处理 (R2 预签名 URL 方式)
@@ -96,8 +96,8 @@
 2. **分析流程**:
    - 前端调用 `/api/submit-video-url` 提交视频 URL
    - 后端创建分析任务记录
-   - 后端下载视频并上传到 Google Gemini
-   - 后端调用 Gemini API 进行 AI 分析
+   - 后端下载视频并通过 LiteLLM 上传至所选模型
+   - 后端调用 LiteLLM 进行 AI 分析
    - 分析完成后保存结果到数据库
 
 3. **结果获取**:
@@ -169,7 +169,7 @@ nextjs-sports-analyzer/
 │   ├── store.ts             # 状态管理
 │   ├── supabaseClient.ts    # Supabase 客户端
 │   ├── r2Client.ts          # R2 客户端
-│   ├── genai.ts             # GenAI 客户端
+│   ├── genai.ts             # LiteLLM AI 客户端
 │   ├── jobStorage.ts        # 任务存储
 │   └── utils.ts             # 工具函数
 ├── utils/                   # 前端工具

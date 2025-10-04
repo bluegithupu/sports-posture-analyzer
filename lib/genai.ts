@@ -1,20 +1,21 @@
-import {
-    GoogleGenAI,
-    createUserContent,
-    createPartFromUri,
-} from '@google/genai';
 import fs from 'fs';
 import path from 'path';
 import { updateAnalysisEventStatus, updateAnalysisEventGeminiLink, completeAnalysisEvent } from './supabaseClient';
+import { LitellmClient, LitellmContentPart, LitellmMessage } from './litellmClient';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+const LITELLM_API_KEY = process.env.LITELLM_API_KEY || process.env.GEMINI_API_KEY;
+const LITELLM_BASE_URL = (process.env.LITELLM_BASE_URL || 'https://api.openai.com/v1').replace(/\/?$/, '');
+const AI_MODEL = process.env.AI_MODEL || process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 
-if (!GEMINI_API_KEY) {
-    console.warn("GEMINI_API_KEY is not set. AI analysis features will be disabled.");
+if (!LITELLM_API_KEY) {
+    console.warn("LITELLM_API_KEY is not set. AI analysis features will be disabled.");
 }
 
-export const ai = GEMINI_API_KEY ? new GoogleGenAI({ apiKey: GEMINI_API_KEY }) : null;
+export const ai = LITELLM_API_KEY ? new LitellmClient({
+    baseUrl: LITELLM_BASE_URL,
+    apiKey: LITELLM_API_KEY,
+    defaultModel: AI_MODEL,
+}) : null;
 
 // Helper function for logging
 const logPrefix = (jobId?: string, dbEventId?: string | null) => {
@@ -40,45 +41,44 @@ export async function uploadFileToGemini(
     filePath: string,
     mimeType: string,
     displayName: string,
-    jobId?: string, // Added for logging
-    dbEventId?: string | null // Added for logging
+    jobId?: string,
+    dbEventId?: string | null
 ) {
     const prefix = logPrefix(jobId, dbEventId);
-    console.info(`${prefix} Attempting to upload file to Gemini. Path: ${filePath}, MimeType: ${mimeType}, DisplayName: ${displayName}`);
+    console.info(`${prefix} Attempting to upload file via LiteLLM. Path: ${filePath}, MimeType: ${mimeType}, DisplayName: ${displayName}`);
     if (!ai) {
-        console.error(`${prefix} Google GenAI SDK not initialized during uploadFileToGemini.`);
-        throw new Error('Google GenAI SDK not initialized');
+        console.error(`${prefix} LiteLLM client not initialized during uploadFileToGemini.`);
+        throw new Error('LiteLLM client not initialized');
     }
 
     try {
         const startTime = Date.now();
-        const uploadedFile = await ai.files.upload({
-            file: filePath,
-            config: {
-                mimeType: mimeType,
-                displayName: displayName
-            },
-        });
-
+        const uploadedFile = await ai.uploadFile(filePath, displayName, mimeType);
         const duration = Date.now() - startTime;
-        console.info(`${prefix} File uploaded to Gemini. URI: ${uploadedFile.uri}, Duration: ${duration}ms`);
+        console.info(`${prefix} File uploaded via LiteLLM. FileID: ${uploadedFile.id}, Status: ${uploadedFile.status || uploadedFile.state || 'unknown'}, Duration: ${duration}ms`);
         return uploadedFile;
     } catch (error) {
-        console.error(`${prefix} Error uploading file to Gemini:`, error instanceof Error ? error.message : error, error);
+        console.error(`${prefix} Error uploading file via LiteLLM:`, error instanceof Error ? error.message : error, error);
         throw error;
     }
 }
-export async function waitForFileProcessing(fileUri: string, maxWaitTime: number = 300000, jobId?: string, dbEventId?: string | null) {
+
+export async function waitForFileProcessing(
+    fileReference: string,
+    maxWaitTime: number = 300000,
+    jobId?: string,
+    dbEventId?: string | null
+) {
     const prefix = logPrefix(jobId, dbEventId);
-    console.info(`${prefix} Waiting for file processing. URI: ${fileUri}, MaxWait: ${maxWaitTime}ms`);
+    console.info(`${prefix} Waiting for file processing. Reference: ${fileReference}, MaxWait: ${maxWaitTime}ms`);
     if (!ai) {
-        console.error(`${prefix} Google GenAI SDK not initialized during waitForFileProcessing.`);
-        throw new Error('Google GenAI SDK not initialized');
+        console.error(`${prefix} LiteLLM client not initialized during waitForFileProcessing.`);
+        throw new Error('LiteLLM client not initialized');
     }
 
-    if (!fileUri) {
-        console.error(`${prefix} File URI is required but was not provided for waitForFileProcessing.`);
-        throw new Error('File URI is required but was not provided');
+    if (!fileReference) {
+        console.error(`${prefix} File reference is required but was not provided for waitForFileProcessing.`);
+        throw new Error('File reference is required but was not provided');
     }
 
     const overallStartTime = Date.now();
@@ -88,38 +88,33 @@ export async function waitForFileProcessing(fileUri: string, maxWaitTime: number
         attempts++;
         const attemptStartTime = Date.now();
         try {
-            const fileName = fileUri.split('/').pop();
-            if (!fileName) {
-                console.error(`${prefix} Invalid file URI format: ${fileUri}`);
-                throw new Error('Invalid file URI format');
-            }
-
-            console.info(`${prefix} Attempt ${attempts}: Getting file info for ${fileName}`);
-            const fileInfo = await ai.files.get({ name: fileName });
+            console.info(`${prefix} Attempt ${attempts}: Getting file info for ${fileReference}`);
+            const fileInfo = await ai.getFile(fileReference);
             const attemptDuration = Date.now() - attemptStartTime;
-            console.info(`${prefix} Attempt ${attempts}: Got file info. State: ${fileInfo.state}, URI: ${fileInfo.uri}, Duration: ${attemptDuration}ms`, fileInfo);
+            console.info(`${prefix} Attempt ${attempts}: Got file info. Status: ${fileInfo.status || fileInfo.state}, Duration: ${attemptDuration}ms`, fileInfo.raw);
 
-            if (fileInfo.state === 'ACTIVE') {
-                console.info(`${prefix} File processing completed and ACTIVE. URI: ${fileInfo.uri}, Total Wait: ${Date.now() - overallStartTime}ms, Attempts: ${attempts}`);
+            if (ai.isFileReady(fileInfo)) {
+                console.info(`${prefix} File processing completed. Reference: ${fileInfo.id}, Total Wait: ${Date.now() - overallStartTime}ms, Attempts: ${attempts}`);
                 return fileInfo;
-            } else if (fileInfo.state === 'FAILED') {
-                console.error(`${prefix} File processing FAILED by Gemini. URI: ${fileInfo.uri}, Info:`, fileInfo);
-                throw new Error('File processing failed by Gemini');
             }
 
-            console.info(`${prefix} File state: ${fileInfo.state} (URI: ${fileInfo.uri}). Waiting 10 seconds before next attempt...`);
-            await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds
+            if (ai.isFileFailed(fileInfo)) {
+                console.error(`${prefix} File processing failed. Reference: ${fileInfo.id}`, fileInfo.raw);
+                throw new Error('File processing failed');
+            }
+
+            console.info(`${prefix} File state: ${fileInfo.status || fileInfo.state}. Waiting 10 seconds before next attempt...`);
+            await new Promise(resolve => setTimeout(resolve, 10000));
         } catch (error) {
             const attemptDuration = Date.now() - attemptStartTime;
             console.error(`${prefix} Attempt ${attempts}: Error checking file status (Duration: ${attemptDuration}ms):`, error instanceof Error ? error.message : error, error);
-            // If it's a transient error, we might want to continue retrying, but if it's a structural error (like bad URI), re-throwing is correct.
-            // For now, re-throw to see what errors occur. If specific errors are retryable, handle them here.
             throw error;
         }
     }
+
     const totalDuration = Date.now() - overallStartTime;
-    console.error(`${prefix} File processing timeout after ${totalDuration}ms and ${attempts} attempts. URI: ${fileUri}`);
-    throw new Error(`File processing timeout for ${fileUri}`);
+    console.error(`${prefix} File processing timeout after ${totalDuration}ms and ${attempts} attempts. Reference: ${fileReference}`);
+    throw new Error(`File processing timeout for ${fileReference}`);
 }
 
 /**
@@ -241,42 +236,52 @@ export async function analyzeMediaWithGemini(
     dbEventId?: string | null
 ): Promise<string> {
     const prefix = logPrefix(jobId, dbEventId);
-    console.info(`${prefix} Starting ${mediaType} analysis with Gemini. URI: ${fileUri}, MimeType: ${mimeType}`);
+    console.info(`${prefix} Starting ${mediaType} analysis via LiteLLM. File reference: ${fileUri}, MimeType: ${mimeType}`);
 
     if (!ai) {
-        console.error(`${prefix} Google GenAI SDK not initialized during analyzeMediaWithGemini.`);
-        throw new Error('Google GenAI SDK not initialized');
+        console.error(`${prefix} LiteLLM client not initialized during analyzeMediaWithGemini.`);
+        throw new Error('LiteLLM client not initialized');
     }
 
     if (!fileUri) {
-        console.error(`${prefix} File URI is required but was not provided for analyzeMediaWithGemini.`);
-        throw new Error('File URI is required but was not provided');
+        console.error(`${prefix} File reference is required but was not provided for analyzeMediaWithGemini.`);
+        throw new Error('File reference is required but was not provided');
     }
 
     const prompt = generateAnalysisPrompt(mediaType, 1);
 
     try {
         const startTime = Date.now();
-        const response = await ai.models.generateContent({
-            model: GEMINI_MODEL,
-            contents: createUserContent([
-                createPartFromUri(fileUri, mimeType),
-                prompt
-            ])
+        const messages: LitellmMessage[] = [{
+            role: 'user',
+            content: [
+                { type: 'input_file', file_id: fileUri },
+                { type: 'input_text', text: prompt },
+            ],
+        }];
+
+        const response = await ai.createResponse({
+            model: AI_MODEL,
+            input: messages,
+            responseFormat: 'text',
+            metadata: {
+                mediaType,
+                mimeType,
+            },
         });
 
         const duration = Date.now() - startTime;
-        const analysisText = response.text;
-        console.info(`${prefix} Gemini ${mediaType} analysis successful. Duration: ${duration}ms. Response received: ${analysisText ? 'Yes' : 'No (Empty)'}`);
+        const analysisText = ai.extractTextFromResponse(response);
+        console.info(`${prefix} LiteLLM ${mediaType} analysis successful. Duration: ${duration}ms. Response received: ${analysisText ? 'Yes' : 'No (Empty)'}`);
 
         if (!analysisText) {
-            console.error(`${prefix} No analysis text received from Gemini. URI: ${fileUri}`);
-            throw new Error('No analysis text received from Gemini');
+            console.error(`${prefix} No analysis text received from LiteLLM for file ${fileUri}`);
+            throw new Error('No analysis text received from AI provider');
         }
 
         return analysisText;
     } catch (error) {
-        console.error(`${prefix} Error analyzing ${mediaType} with Gemini (URI: ${fileUri}):`, error instanceof Error ? error.message : error, error);
+        console.error(`${prefix} Error analyzing ${mediaType} via LiteLLM (Reference: ${fileUri}):`, error instanceof Error ? error.message : error, error);
         throw error;
     }
 }
@@ -296,30 +301,32 @@ export async function performCompleteAnalysis(
     const prefix = logPrefix(jobId, dbEventId);
     console.info(`${prefix} Starting performCompleteAnalysis. FilePath: ${filePath}`);
     if (!ai) {
-        console.error(`${prefix} Google GenAI SDK not initialized during performCompleteAnalysis.`);
-        throw new Error('Google GenAI SDK not initialized');
+        console.error(`${prefix} LiteLLM client not initialized during performCompleteAnalysis.`);
+        throw new Error('LiteLLM client not initialized');
     }
 
     try {
-        // 1. 上传文件到 Gemini
-        console.info(`${prefix} Step 1: Uploading file to Gemini...`);
+        // 1. 上传文件到通用模型
+        console.info(`${prefix} Step 1: Uploading file via LiteLLM...`);
         const uploadedFile = await uploadFileToGemini(filePath, mimeType, displayName, jobId, dbEventId);
 
-        if (!uploadedFile || !uploadedFile.uri) {
-            console.error(`${prefix} Step 1 Failed: Failed to upload file to Gemini, no URI returned.`);
-            throw new Error('Failed to upload file to Gemini: No URI returned');
+        const fileReference = uploadedFile?.id || uploadedFile?.uri;
+
+        if (!uploadedFile || !fileReference) {
+            console.error(`${prefix} Step 1 Failed: Failed to upload file via LiteLLM, no reference returned.`);
+            throw new Error('Failed to upload file via LiteLLM: No reference returned');
         }
-        console.info(`${prefix} Step 1 Success: File uploaded. URI: ${uploadedFile.uri}`);
+        console.info(`${prefix} Step 1 Success: File uploaded. Reference: ${fileReference}`);
 
         // 2. 等待文件处理完成
-        console.info(`${prefix} Step 2: Waiting for file processing... URI: ${uploadedFile.uri}`);
-        await waitForFileProcessing(uploadedFile.uri, undefined, jobId, dbEventId); // Using default maxWaitTime
-        console.info(`${prefix} Step 2 Success: File processing complete. URI: ${uploadedFile.uri}`);
+        console.info(`${prefix} Step 2: Waiting for file processing... Reference: ${fileReference}`);
+        await waitForFileProcessing(fileReference, undefined, jobId, dbEventId); // Using default maxWaitTime
+        console.info(`${prefix} Step 2 Success: File processing complete. Reference: ${fileReference}`);
 
         // 3. 进行分析
-        console.info(`${prefix} Step 3: Analyzing video... URI: ${uploadedFile.uri}`);
-        const analysisResult = await analyzeMediaWithGemini(uploadedFile.uri, mimeType, 'video', jobId, dbEventId);
-        console.info(`${prefix} Step 3 Success: Video analysis complete. URI: ${uploadedFile.uri}`);
+        console.info(`${prefix} Step 3: Analyzing video... Reference: ${fileReference}`);
+        const analysisResult = await analyzeMediaWithGemini(fileReference, mimeType, 'video', jobId, dbEventId);
+        console.info(`${prefix} Step 3 Success: Video analysis complete. Reference: ${fileReference}`);
 
         console.info(`${prefix} performCompleteAnalysis finished successfully.`);
         return analysisResult;
@@ -342,12 +349,12 @@ export async function performAnalysisFromUrl(
     console.info(`${prefix} Starting performAnalysisFromUrl. VideoURL: ${videoUrl}, Filename: ${originalFilename}`);
 
     if (!ai) {
-        const errorMsg = 'Google GenAI SDK not initialized on server.';
+        const errorMsg = 'LiteLLM client not initialized on server.';
         console.error(`${prefix} ${errorMsg}`);
         // analysisJobs[jobId] = { ... }; // REMOVED
         // if (dbEventId) { // dbEventId is jobId
         try {
-            await updateAnalysisEventStatus(jobId, 'failed', errorMsg, 'Setup Error: GenAI SDK not initialized.');
+            await updateAnalysisEventStatus(jobId, 'failed', errorMsg, 'Setup Error: AI client not initialized.');
             console.info(`${prefix} Supabase status updated to FAILED due to SDK init error.`);
         } catch (dbError) {
             console.error(`${prefix} Failed to update Supabase status to FAILED for SDK init error:`, dbError);
@@ -399,10 +406,10 @@ export async function performAnalysisFromUrl(
         // analysisJobs[jobId] = { ... }; // REMOVED
         // if (dbEventId) { // dbEventId is jobId
         try {
-            await updateAnalysisEventStatus(jobId, 'processing', null, 'Video downloaded, GenAI processing starting...');
-            console.info(`${prefix} Supabase status updated to PROCESSING (Local file ready for GenAI).`);
+            await updateAnalysisEventStatus(jobId, 'processing', null, 'Video downloaded, AI processing starting...');
+            console.info(`${prefix} Supabase status updated to PROCESSING (Local file ready for AI processing).`);
         } catch (dbError) {
-            console.warn(`${prefix} Failed to update Supabase status to PROCESSING (Local file ready for GenAI):`, dbError);
+            console.warn(`${prefix} Failed to update Supabase status to PROCESSING (Local file ready for AI processing):`, dbError);
         }
         // }
 
@@ -467,51 +474,53 @@ export async function performAnalysisWithLocalFile(
     const overallStartTime = Date.now();
 
     try {
-        // console.info(`${prefix} Updating jobStorage: message='Uploading file to Google GenAI...'`);
+        // console.info(`${prefix} Updating jobStorage: message='Uploading file to AI provider...'`);
         // analysisJobs[jobId] = { ... }; // REMOVED
         // if (dbEventId) { // dbEventId is jobId
         try {
-            await updateAnalysisEventStatus(jobId, 'processing', null, 'Uploading file to Google GenAI...');
-            console.info(`${prefix} Supabase status updated to PROCESSING (Uploading to GenAI).`);
+            await updateAnalysisEventStatus(jobId, 'processing', null, 'Uploading file to AI provider...');
+            console.info(`${prefix} Supabase status updated to PROCESSING (Uploading to AI provider).`);
         } catch (dbError) {
-            console.warn(`${prefix} Failed to update Supabase status to PROCESSING (Uploading to GenAI):`, dbError);
+            console.warn(`${prefix} Failed to update Supabase status to PROCESSING (Uploading to AI provider):`, dbError);
         }
         // }
         console.info(`${prefix} Uploading file: ${localFilePath} (Original: ${originalFilename}, Type: ${mimeType})`);
 
-        // 上传文件到 Gemini
+        // 上传文件
         const uploadedFile = await uploadFileToGemini(localFilePath, mimeType, originalFilename, jobId, dbEventId);
 
-        if (!uploadedFile || !uploadedFile.uri) {
-            console.error(`${prefix} Failed to upload file to Gemini: No URI returned.`);
-            throw new Error('Failed to upload file to Gemini: No URI returned');
+        const fileReference = uploadedFile?.id || uploadedFile?.uri;
+
+        if (!uploadedFile || !fileReference) {
+            console.error(`${prefix} Failed to upload file via LiteLLM: No reference returned.`);
+            throw new Error('Failed to upload file via LiteLLM: No reference returned');
         }
-        console.info(`${prefix} File uploaded to Gemini. URI: ${uploadedFile.uri}. Updating Supabase.`);
+        console.info(`${prefix} File uploaded via LiteLLM. Reference: ${fileReference}. Updating Supabase.`);
         // analysisJobs[jobId] = { ... }; // REMOVED
 
-        // 更新数据库中的 Gemini 文件链接 和 status_text
+        // 更新数据库中的 AI 文件引用 和 status_text
         // if (dbEventId) { // dbEventId is jobId
-        console.info(`${prefix} Attempting to update Supabase with Gemini file link: ${uploadedFile.uri}`);
+        console.info(`${prefix} Attempting to update Supabase with AI file reference: ${fileReference}`);
         try {
             // updateAnalysisEventGeminiLink also sets status to processing and a status_text
-            await updateAnalysisEventGeminiLink(jobId, uploadedFile.uri);
-            console.info(`${prefix} Supabase Gemini file link and status updated successfully.`);
+            await updateAnalysisEventGeminiLink(jobId, fileReference);
+            console.info(`${prefix} Supabase AI file reference and status updated successfully.`);
         } catch (dbError) {
-            console.warn(`${prefix} Failed to update Supabase Gemini file link or status:`, dbError);
+            console.warn(`${prefix} Failed to update Supabase AI file reference or status:`, dbError);
         }
         // }
 
         // 等待文件处理
-        console.info(`${prefix} Waiting for Gemini file processing... URI: ${uploadedFile.uri}`);
+        console.info(`${prefix} Waiting for AI file processing... Reference: ${fileReference}`);
         // analysisJobs[jobId] = { ... }; // REMOVED
         // No specific Supabase status update here as updateAnalysisEventGeminiLink covers it.
 
-        await waitForFileProcessing(uploadedFile.uri, undefined, jobId, dbEventId);
-        console.info(`${prefix} Gemini file processing completed. URI: ${uploadedFile.uri}`);
+        await waitForFileProcessing(fileReference, undefined, jobId, dbEventId);
+        console.info(`${prefix} AI file processing completed. Reference: ${fileReference}`);
         // analysisJobs[jobId] = { ... }; // REMOVED
         // if (dbEventId) { // dbEventId is jobId
         try {
-            await updateAnalysisEventStatus(jobId, 'processing', null, 'GenAI file active, starting content analysis...');
+            await updateAnalysisEventStatus(jobId, 'processing', null, 'AI file active, starting content analysis...');
             console.info(`${prefix} Supabase status updated to PROCESSING (Analyzing content).`);
         } catch (dbError) {
             console.warn(`${prefix} Failed to update Supabase status to PROCESSING (Analyzing content):`, dbError);
@@ -519,15 +528,15 @@ export async function performAnalysisWithLocalFile(
         // }
 
         // 进行分析
-        console.info(`${prefix} Starting Gemini content analysis... URI: ${uploadedFile.uri}`);
-        const analysisResultText = await analyzeMediaWithGemini(uploadedFile.uri, mimeType, 'video', jobId, dbEventId);
-        console.info(`${prefix} Gemini content analysis successful. Result text received.`);
+        console.info(`${prefix} Starting AI content analysis... Reference: ${fileReference}`);
+        const analysisResultText = await analyzeMediaWithGemini(fileReference, mimeType, 'video', jobId, dbEventId);
+        console.info(`${prefix} AI content analysis successful. Result text received.`);
 
         // 完成分析
         const analysisReport = {
             text: analysisResultText,
             timestamp: new Date().toISOString(),
-            model_used: GEMINI_MODEL // Use the configured model name
+            model_used: AI_MODEL // Use the configured model name
         };
         console.info(`${prefix} Analysis report prepared. Updating Supabase to COMPLETED.`);
 
@@ -578,8 +587,8 @@ export async function analyzeImages(images: Array<{ url: string, filename: strin
     console.info(`Starting image analysis for ${images.length} images`);
 
     if (!ai) {
-        console.error('Google GenAI SDK not initialized during analyzeImages');
-        throw new Error('Google GenAI SDK not initialized');
+        console.error('LiteLLM client not initialized during analyzeImages');
+        throw new Error('LiteLLM client not initialized');
     }
 
     if (!images || images.length === 0) {
@@ -597,7 +606,7 @@ export async function analyzeImages(images: Array<{ url: string, filename: strin
         const startTime = Date.now();
 
         // 创建内容数组，包含所有图片
-        const contentParts = [];
+        const contentParts: LitellmContentPart[] = [];
 
         // 下载并转换图片为base64
         for (let i = 0; i < images.length; i++) {
@@ -617,10 +626,9 @@ export async function analyzeImages(images: Array<{ url: string, filename: strin
 
                 // 添加图片数据到内容数组
                 contentParts.push({
-                    inlineData: {
-                        data: base64,
-                        mimeType: image.contentType
-                    }
+                    type: 'input_image',
+                    image_base64: base64,
+                    mime_type: image.contentType
                 });
 
                 console.info(`Successfully converted image ${i + 1} to base64`);
@@ -631,25 +639,30 @@ export async function analyzeImages(images: Array<{ url: string, filename: strin
         }
 
         // 添加提示词
-        contentParts.push({ text: fullPrompt });
+        contentParts.push({ type: 'input_text', text: fullPrompt });
 
-        const response = await ai.models.generateContent({
-            model: GEMINI_MODEL,
-            contents: [{ role: 'user', parts: contentParts }]
+        const response = await ai.createResponse({
+            model: AI_MODEL,
+            input: [{ role: 'user', content: contentParts }],
+            responseFormat: 'text',
+            metadata: {
+                mediaType: 'image',
+                imageCount: images.length,
+            },
         });
 
         const duration = Date.now() - startTime;
-        const analysisText = response.text;
-        console.info(`Image analysis successful. Duration: ${duration}ms. Response received: ${analysisText ? 'Yes' : 'No (Empty)'}`);
+        const analysisText = ai.extractTextFromResponse(response);
+        console.info(`Image analysis successful via LiteLLM. Duration: ${duration}ms. Response received: ${analysisText ? 'Yes' : 'No (Empty)'}`);
 
         if (!analysisText) {
-            console.error('No analysis text received from Gemini for images');
-            throw new Error('No analysis text received from Gemini');
+            console.error('No analysis text received from LiteLLM for images');
+            throw new Error('No analysis text received from AI provider');
         }
 
         return analysisText;
     } catch (error) {
-        console.error('Error analyzing images with Gemini:', error instanceof Error ? error.message : error, error);
+        console.error('Error analyzing images via LiteLLM:', error instanceof Error ? error.message : error, error);
         throw error;
     }
 }
@@ -675,7 +688,7 @@ export async function performImageAnalysis(
         }
 
         // 进行图片分析
-        console.info(`${prefix} Starting image analysis with Gemini...`);
+        console.info(`${prefix} Starting image analysis with AI provider...`);
         const analysisStartTime = Date.now();
         const analysisText = await analyzeImages(images);
         const analysisDuration = Date.now() - analysisStartTime;
@@ -685,7 +698,7 @@ export async function performImageAnalysis(
         const analysisReport = {
             text: analysisText, // 统一使用 text 字段
             timestamp: new Date().toISOString(), // 统一使用 timestamp 字段
-            model_used: GEMINI_MODEL, // 使用配置的模型名称
+            model_used: AI_MODEL, // 使用配置的模型名称
             analysis_type: 'image' as const,
             image_count: images.length,
             processing_duration_ms: analysisDuration,

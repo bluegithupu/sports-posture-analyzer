@@ -175,7 +175,7 @@ export async function updateAnalysisEventGeminiLink(eventId: string, geminiFileL
             .update({
                 gemini_file_link: geminiFileLink,
                 status: 'processing',
-                status_text: 'Gemini file link stored, awaiting GenAI processing.'
+                status_text: 'Model file reference stored, awaiting AI processing.'
             })
             .eq('id', eventId);
 
