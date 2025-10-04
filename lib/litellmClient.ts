@@ -83,8 +83,12 @@ export class LitellmClient {
     async uploadFile(filePath: string, displayName: string, mimeType?: string): Promise<LitellmFileInfo> {
         const resolvedPath = fs.existsSync(filePath) ? filePath : fs.realpathSync(filePath);
         const formData = new FormData();
-        const fileStream = fs.createReadStream(resolvedPath);
-        formData.append('file', fileStream, displayName);
+
+        // 读取文件为 Buffer，然后转换为 Blob
+        const fileBuffer = fs.readFileSync(resolvedPath);
+        const fileBlob = new Blob([fileBuffer], { type: mimeType || 'application/octet-stream' });
+
+        formData.append('file', fileBlob, displayName);
         formData.append('purpose', 'responses');
         if (mimeType) {
             formData.append('mime_type', mimeType);
@@ -216,8 +220,8 @@ export class LitellmClient {
         const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
 
         try {
-            const headers: HeadersInit = {
-                ...(init.headers || {}),
+            const headers: Record<string, string> = {
+                ...(init.headers as Record<string, string> || {}),
             };
 
             if (this.apiKey) {
