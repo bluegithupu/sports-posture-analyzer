@@ -10,7 +10,8 @@ export function setupTestEnv() {
     process.env.R2_BUCKET_NAME = 'test-bucket';
     process.env.R2_PUBLIC_URL_BASE = 'https://test.r2.dev';
     process.env.R2_PUB_URL = 'https://test.r2.dev';
-    process.env.GENAI_API_KEY = 'test_genai_key';
+    process.env.LITELLM_API_KEY = 'test_litellm_key';
+    process.env.AI_MODEL = 'test-ai-model';
 }
 
 // Mock 函数工厂 - 使用 mock 前缀以符合 Jest 要求
@@ -45,4 +46,4 @@ export const mockGenAIClient = () => ({
 // 通用 Mock 工厂
 export const createMockSupabaseClient = mockSupabaseClient;
 export const createMockR2Client = mockR2Client;
-export const createMockGenAIClient = mockGenAIClient; 
+export const createMockGenAIClient = mockGenAIClient;

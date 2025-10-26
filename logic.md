@@ -40,14 +40,14 @@
     *   函数从 R2 (`publicUrl`) 下载视频文件到服务器的临时存储。
     *   更新 `jobStorage` 中的状态，指明正在下载或已下载。
     *   调用 `performAnalysisWithLocalFile` (同样在 `lib/genai.ts`):
-        *   将本地临时视频文件上传到 Google Gemini。
-        *   更新 `jobStorage` 状态，并更新 Supabase 中对应的 Gemini 文件链接。
-        *   等待 Gemini 服务处理上传的文件。
-        *   调用 Google Gemini API 对视频进行姿态分析。
+        *   将本地临时视频文件上传到 LiteLLM 对接的模型提供商。
+        *   更新 `jobStorage` 状态，并更新 Supabase 中对应的模型文件引用。
+        *   等待模型服务处理上传的文件。
+        *   调用 LiteLLM 接口对视频进行姿态分析。
         *   更新 `jobStorage` 状态，指明正在分析。
 
 3.  **存储分析结果:**
-    *   分析完成后，从 Gemini API 获取分析报告。
+    *   分析完成后，从 LiteLLM API 获取分析报告。
     *   将包含文本报告和时间戳的分析结果保存在 `jobStorage` 中。
 
 4.  **更新任务状态 (最终状态):**
@@ -111,13 +111,13 @@ flowchart LR
         AsyncFunc_Start_Internal[Start Analysis] --> DownloadVideo[Download from R2];
         DownloadVideo --> MemStore_Update1[MemStore Status Downloading];
         DownloadVideo --> R2_ActualDownload[R2 Get Video];
-        R2_ActualDownload --> UploadToAI[Upload to GenAI];
-        UploadToAI --> MemStore_Update2[MemStore Status Uploading GenAI];
-        UploadToAI --> GenAI_Upload[GenAI Store File];
-        GenAI_Upload --> DB_UpdateLink[Supabase Update GenAI Link];
-        DB_UpdateLink --> WaitGenAI[Wait GenAI Processing];
-        WaitGenAI --> GenAI_Analyze[GenAI Analyze Video];
-        GenAI_Analyze --> MemStore_Update3[MemStore Status Analyzing];
+        R2_ActualDownload --> UploadToAI[Upload to LiteLLM];
+        UploadToAI --> MemStore_Update2[MemStore Status Uploading to AI];
+        UploadToAI --> AI_Upload[LiteLLM Store File];
+        AI_Upload --> DB_UpdateLink[Supabase Update AI File Reference];
+        DB_UpdateLink --> WaitAI[Wait AI Processing];
+        WaitAI --> AI_Analyze[AI Analyze Video];
+        AI_Analyze --> MemStore_Update3[MemStore Status Analyzing];
         MemStore_Update3 --> StoreResults[Process and Store Results];
         StoreResults --> MemStore_Final[MemStore Status Done/Failed Save Report];
         StoreResults --> DB_Final[Supabase Status Done/Failed Save Report];

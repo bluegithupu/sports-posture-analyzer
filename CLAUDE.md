@@ -4,14 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-这是一个基于 Next.js 的运动姿态分析应用，用户可以上传运动视频，通过 Google Gemini AI 获得姿态分析报告。
+这是一个基于 Next.js 的运动姿态分析应用，用户可以上传运动视频，通过 LiteLLM 统一接入的多模型能力获得姿态分析报告。
 
 ## 核心架构
 
 ### 技术栈
 - **前端**: Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS
 - **后端**: Next.js API Routes
-- **AI 分析**: Google Gemini AI (@google/genai)
+- **AI 分析**: LiteLLM SDK（支持 Gemini、OpenAI 等模型）
 - **存储**: Cloudflare R2 (视频文件存储)
 - **数据库**: Supabase (分析结果和历史记录)
 - **测试**: Jest with ts-jest
@@ -59,7 +59,7 @@ npm run test:coverage
 - `app/api/jobs/[jobId]/retry/route.ts` - 重试失败任务
 
 ### 核心库文件
-- `lib/genai.ts` - Google Gemini AI 集成和异步分析处理
+- `lib/genai.ts` - LiteLLM 驱动的通用 AI 分析与异步处理
 - `lib/supabaseClient.ts` - Supabase 数据库操作
 - `lib/r2Client.ts` - Cloudflare R2 存储操作
 - `lib/store.ts` - 内存任务状态管理
@@ -76,9 +76,13 @@ npm run test:coverage
 项目需要以下环境变量：
 
 ```bash
-# Google Gemini AI
-GEMINI_API_KEY=your_gemini_api_key
-GEMINI_MODEL=gemini-2.0-flash  # 可选，默认值
+# LiteLLM / AI 提供商
+LITELLM_API_KEY=your_litellm_api_key
+# 可选：自定义 LiteLLM Proxy 或兼容接口地址
+# LITELLM_BASE_URL=https://your-litellm-proxy/v1
+# 模型选择（兼容旧的 GEMINI_MODEL 变量）
+AI_MODEL=gemini-2.0-flash
+# GEMINI_MODEL=gpt-4o-mini
 
 # Cloudflare R2
 R2_ACCESS_KEY_ID=your_r2_access_key
